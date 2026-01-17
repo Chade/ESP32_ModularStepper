@@ -11,26 +11,6 @@
 namespace Stepper
 {
 
-    enum class State : uint8_t
-    {
-        UNDEFINED = 0,
-        MOVING = 1,
-        ACCELERATING = 3,
-        DECELERATING = 5,
-        PAUSED = 16,
-        STOPPED = 32,
-        INHIBITED = 96,
-        EMERGENCYSTOP = 224
-    };
-
-    enum class TaskState : uint8_t
-    {
-        UNDEFINED = 0,
-        ACTIVE = 1,
-        PAUSED = 2,
-        STOPPED = 3,
-    };
-
     struct Task
     {
         /* Define a task for the step generator to execute
@@ -64,12 +44,28 @@ namespace Stepper
          */
 
     public:
+        enum class Direction : int8_t
+        {
+            CLOCKWISE = -1,
+            NEUTRAL = 0,
+            COUTERCLOCKWISE = 1
+        };
+
+        enum class TaskState : uint8_t
+        {
+            UNDEFINED = 0,
+            ACTIVE = 1,
+            PAUSED = 2,
+            STOPPED = 3,
+        };
+
         uint64_t id{0};
         uint64_t steps{0};
         uint16_t steps_per_second{0};
         uint16_t acceleration{0};
         uint16_t deceleration{0};
         Direction direction{Direction::NEUTRAL};
+
     };
 
     class CoreTask : public Task
@@ -93,7 +89,7 @@ namespace Stepper
             return *this;
         };
 
-        TaskState getState()
+        TaskState getState() const
         {
             return state;
         };
@@ -168,12 +164,12 @@ namespace Stepper
             m_taskQueue.clear();
         };
 
-        size_t size()
+        size_t size() const
         {
             return m_taskQueue.size();
         };
 
-        bool isEmpty()
+        bool isEmpty() const
         {
             return m_taskQueue.empty();
         };

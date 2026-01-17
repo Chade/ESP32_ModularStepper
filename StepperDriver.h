@@ -3,12 +3,11 @@
 
 #include "StepperHelper.h"
 #include "freertos/FreeRTOS.h"
-#include "freertos/semphr.h"
 #include "freertos/task.h"
 #include <driver/pulse_cnt.h>
 #include <functional>
 
-#include <memory>
+// #include <memory>
 
 namespace Stepper
 {
@@ -26,20 +25,25 @@ namespace Stepper
         void start();
         void stop();
 
+        void setTimings(uint32_t stepPulseWidthHigh_us, uint32_t stepPulseWidthLow_us, uint32_t directionDelay_ns, uint32_t maxPulsePeriodUs = 3200);
+        void registerCallback(DriverCallback callback);
+
         void doStep();
         void doStepFromISR(BaseType_t *pxHigherPriorityTaskWoken = nullptr);
+
         void setDirection(Direction direction);
         void setDirectionFromISR(Direction direction, BaseType_t *pxHigherPriorityTaskWoken = nullptr);
-        Direction getDirection();
+        Direction getDirection() const;
         Direction changeDirection();
-        void registerCallback(DriverCallback callback);
-        void setTimings(uint32_t stepPulseWidthHigh_us, uint32_t stepPulseWidthLow_us, uint32_t directionDelay_ns, uint32_t maxPulsePeriodUs = 3200);
-        uint32_t getMinPulsePeriodUs();
-        uint32_t getMaxPulsePeriodUs();
+
+        uint32_t getMinPulsePeriodUs() const;
+        uint32_t getMaxPulsePeriodUs() const;
+
         void enable();
         void disable();
-        bool isEnabled();
-        int32_t getCount();
+        bool isEnabled() const;
+
+        int32_t getCount() const;
         void resetCount();
 
     protected:
@@ -62,6 +66,8 @@ namespace Stepper
         static constexpr uint32_t ulDoStepBitmask = 1UL << 0;
         static constexpr uint32_t ulDoDirectionChangeBitmask = 1UL << 1;
         static constexpr uint32_t ulDirectionBitmask = 1UL << 2;
+
+        static constexpr const char* log_tag = "Driver";
 
         TaskHandle_t m_taskHandle{nullptr};
         pcnt_unit_handle_t m_pcntUnitHandle{nullptr};

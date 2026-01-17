@@ -4,8 +4,6 @@
 #include "StepperEvent.h"
 #include "StepperTask.h"
 #include <deque>
-#include <esp_log.h>
-#include <esp_timer.h>
 
 namespace Stepper
 {
@@ -35,6 +33,8 @@ namespace Stepper
 
         CoreTask m_activeTask;
         bool m_taskRunnerStop{false};
+
+        static constexpr const char* log_tag = "Core";
     };
 }
 

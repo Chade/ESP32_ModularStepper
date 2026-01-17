@@ -1,21 +1,21 @@
 #include "StepperCore.h"
+#include "StepperLog.h"
 
 namespace Stepper
 {
-
-    static const char *LOG_TAG = "Core";
-
     Core::Core()
     {
-        ESP_LOGI(LOG_TAG, "Create task queue");
+        esp_log_level_set(log_tag, ESP_LOG_INFO);
+
+        ESP_LOGI(log_tag, "Create task queue");
         m_taskQueueHandle = xQueueCreate(taskQueueSize, sizeof(struct Task));
         assert(m_taskQueueHandle != 0);
 
-        ESP_LOGI(LOG_TAG, "Create task event loop");
-        ESP_ERROR_CHECK(taskEventLoopCreate(taskEventLoopQueueSize, uxTaskPriorityGet(NULL) + 1));
+        ESP_LOGI(log_tag, "Create task event loop");
+        ESP_ERROR_CHECK(taskEventLoopCreate(taskEventLoopQueueSize, 2));
 
-        ESP_LOGI(LOG_TAG, "Create stop event loop");
-        ESP_ERROR_CHECK(stopEventLoopCreate(stopEventLoopQueueSize, uxTaskPriorityGet(NULL) + 1));
+        ESP_LOGI(log_tag, "Create stop event loop");
+        ESP_ERROR_CHECK(stopEventLoopCreate(stopEventLoopQueueSize, 2));
     }
 
     Core::~Core()
@@ -27,38 +27,38 @@ namespace Stepper
 
     void Core::start()
     {
-        ESP_LOGI(LOG_TAG, "Register to task event");
+        ESP_LOGI(log_tag, "Register to task event");
         ESP_ERROR_CHECK(taskEventLoopHandlerRegister(TaskEventId::ANY_EVENT, taskEventCallback, this));
 
-        ESP_LOGI(LOG_TAG, "Register to stop event");
+        ESP_LOGI(log_tag, "Register to stop event");
         ESP_ERROR_CHECK(stopEventLoopHandlerRegister(StopEventId::ANY_EVENT, stopEventCallback, this));
 
         if (m_taskHandle == nullptr)
         {
-            ESP_LOGI(LOG_TAG, "Create task runner");
+            ESP_LOGI(log_tag, "Create task runner");
             // disableCore1WDT(); // Should not be necessary, as we should not add too much load to one core
             xTaskCreatePinnedToCore(
                 Core::taskRunner,            /* Task function */
                 "CoreTask",                  /* Task name (max. 16 characters by default) */
                 3072,                        /* Stack size in bytes */
                 this,                        /* Parameter passed as input of the task */
-                uxTaskPriorityGet(NULL) + 2, /* Task priority */
+                1,                           /* Task priority */
                 &m_taskHandle,               /* Task handle */
                 1                            /* CPU core to use */
             );
         }
         else
         {
-            ESP_LOGE(LOG_TAG, "Task runner already created!");
+            ESP_LOGE(log_tag, "Task runner already created!");
         }
     }
 
     void Core::stop()
     {
-        ESP_LOGI(LOG_TAG, "Unregister from task event");
+        ESP_LOGI(log_tag, "Unregister from task event");
         ESP_ERROR_CHECK(taskEventLoopHandlerUnregister(TaskEventId::ANY_EVENT, taskEventCallback));
 
-        ESP_LOGI(LOG_TAG, "Unregister from stop event");
+        ESP_LOGI(log_tag, "Unregister from stop event");
         ESP_ERROR_CHECK(stopEventLoopHandlerUnregister(StopEventId::ANY_EVENT, stopEventCallback));
 
         // Signal task runnner to stop
@@ -71,12 +71,12 @@ namespace Stepper
             int64_t timeElapsed = esp_timer_get_time() - startTime;
             if (timeElapsed < taskRunnerStopTimeout_us)
             {
-                ESP_LOGI(LOG_TAG, "Waiting for task runner to stop");
+                ESP_LOGI(log_tag, "Waiting for task runner to stop");
                 vTaskDelay(pdMS_TO_TICKS(500));
             }
             else
             {
-                ESP_LOGI(LOG_TAG, "Force task runner to stop");
+                ESP_LOGI(log_tag, "Force task runner to stop");
                 vTaskDelete(m_taskHandle);
                 m_taskHandle = nullptr;
             }
@@ -85,7 +85,7 @@ namespace Stepper
 
     bool Core::hasActiveTask()
     {
-        return m_activeTask.getState() != TaskState::UNDEFINED;
+        return m_activeTask.getState() != Task::TaskState::UNDEFINED;
     }
 
     void Core::taskRunner(void *args)
@@ -102,15 +102,15 @@ namespace Stepper
             }
             else
             {
-                if (xQueueReceive(core->m_taskQueueHandle, &task, pdMS_TO_TICKS(1000) == pdTRUE))
+                if (xQueueReceive(core->m_taskQueueHandle, &task, pdMS_TO_TICKS(1000)) == pdTRUE)
                 {
                     core->m_activeTask = task;
-                    core->m_activeTask.setState(TaskState::ACTIVE);
+                    core->m_activeTask.setState(Task::TaskState::ACTIVE);
                 }
             }
         }
 
-        ESP_LOGE(LOG_TAG, "Task runner aborted!");
+        ESP_LOGE(log_tag, "Task runner aborted!");
         vTaskDelete(nullptr);
         core->m_taskHandle = nullptr;
     }
@@ -122,29 +122,29 @@ namespace Stepper
         switch (static_cast<TaskEventId>(eventId))
         {
         case TaskEventId::ANY_EVENT:
-            ESP_LOGI(LOG_TAG, "Received new %s|ANY_EVENT", eventBase);
+            ESP_LOGI(log_tag, "Received new %s|ANY_EVENT", eventBase);
             break;
         case TaskEventId::NEW_TASK_EVENT:
-            ESP_LOGI(LOG_TAG, "Received new %s|NEW_TASK_EVENT", eventBase);
+            ESP_LOGI(log_tag, "Received new %s|NEW_TASK_EVENT", eventBase);
             if (xQueueSendToBack(core->m_taskQueueHandle, eventData, 0) != pdPASS)
             {
-                ESP_LOGE(LOG_TAG, "Could not enqueue new task");
+                ESP_LOGE(log_tag, "Could not enqueue new task");
             }
             break;
         case TaskEventId::TASK_STARTED_EVENT:
-            ESP_LOGI(LOG_TAG, "Received new %s|TASK_STARTED_EVENT", eventBase);
+            ESP_LOGI(log_tag, "Received new %s|TASK_STARTED_EVENT", eventBase);
             break;
         case TaskEventId::TASK_FEEDBACK_EVENT:
-            ESP_LOGI(LOG_TAG, "Received new %s|TASK_FEEDBACK_EVENT", eventBase);
+            ESP_LOGI(log_tag, "Received new %s|TASK_FEEDBACK_EVENT", eventBase);
             break;
         case TaskEventId::TASK_FINISHED_EVENT:
-            ESP_LOGI(LOG_TAG, "Received new %s|TASK_FINISHED_EVENT", eventBase);
+            ESP_LOGI(log_tag, "Received new %s|TASK_FINISHED_EVENT", eventBase);
             break;
         case TaskEventId::TASK_ABORTED_EVENT:
-            ESP_LOGI(LOG_TAG, "Received new %s|TASK_ABORTED_EVENT", eventBase);
+            ESP_LOGI(log_tag, "Received new %s|TASK_ABORTED_EVENT", eventBase);
             break;
         default:
-            ESP_LOGE(LOG_TAG, "Received unknown event %s|%i", eventBase, eventId);
+            ESP_LOGE(log_tag, "Received unknown event %s|%i", eventBase, eventId);
         }
     }
 
@@ -155,82 +155,26 @@ namespace Stepper
         switch (static_cast<StopEventId>(eventId))
         {
         case StopEventId::ANY_EVENT:
-            ESP_LOGI(LOG_TAG, "Received new %s|ANY_EVENT", eventBase);
+            ESP_LOGI(log_tag, "Received new %s|ANY_EVENT", eventBase);
             break;
         case StopEventId::RESUME_EVENT:
-            ESP_LOGI(LOG_TAG, "Received new %s|RESUME_EVENT", eventBase);
+            ESP_LOGI(log_tag, "Received new %s|RESUME_EVENT", eventBase);
             break;
         case StopEventId::PAUSE_EVENT:
-            ESP_LOGI(LOG_TAG, "Received new %s|PAUSE_EVENT", eventBase);
+            ESP_LOGI(log_tag, "Received new %s|PAUSE_EVENT", eventBase);
             break;
         case StopEventId::HALT_EVENT:
-            ESP_LOGI(LOG_TAG, "Received new %s|HALT_EVENT", eventBase);
+            ESP_LOGI(log_tag, "Received new %s|HALT_EVENT", eventBase);
             break;
         case StopEventId::FAST_STOP_EVENT:
-            ESP_LOGI(LOG_TAG, "Received new %s|FAST_STOP_EVENT", eventBase);
+            ESP_LOGI(log_tag, "Received new %s|FAST_STOP_EVENT", eventBase);
             break;
         case StopEventId::EMERGENCY_STOP_EVENT:
-            ESP_LOGI(LOG_TAG, "Received new %s|EMERGENCY_STOP_EVENT", eventBase);
+            ESP_LOGI(log_tag, "Received new %s|EMERGENCY_STOP_EVENT", eventBase);
             break;
         default:
-            ESP_LOGE(LOG_TAG, "Received unknown event %s|%i", eventBase, eventId);
+            ESP_LOGE(log_tag, "Received unknown event %s|%i", eventBase, eventId);
         }
     }
-
-    /*
-    Calculate the steps needed to reach the desired steps/s velocity:
-
-    steps_needed = (v1^2 - v0^2) / 2 * a
-
-    The time to finish the movement is calculated as:
-
-    t = (v1 - v0) / a
-
-    The time needs to be divided by the needed steps
-
-
-
-    We now know hom many steps we need to reach final velocity.
-    We now have to calculate the time between steps.
-    For a given constant speed v in steps/s the time between two steps is 1/v
-    For an accelerated movement, the time difference between steps needs to be adapted
-
-    v(t) = a*t
-    s(t) = v0*t + 0.5*a*t^2
-    x(t) = x0 + v0*t + 0.5*a*t^2
-
-    t1 = t0 * (1 - a * t0^2)
-    t1 = t0 - a * t0^3
-    */
-
-    /*
-    void ESP_FlexyStepper::setSpeedInStepsPerSecond(float speedInStepsPerSecond)
-    {
-      desiredSpeed_InStepsPerSecond = speedInStepsPerSecond;
-      desiredPeriod_InUSPerStep = 1000000.0 / desiredSpeed_InStepsPerSecond;
-    }
-
-    void ESP_FlexyStepper::setAccelerationInStepsPerSecondPerSecond(
-        float accelerationInStepsPerSecondPerSecond)
-    {
-      acceleration_InStepsPerSecondPerSecond = accelerationInStepsPerSecondPerSecond;
-      acceleration_InStepsPerUSPerUS = acceleration_InStepsPerSecondPerSecond / 1E12;
-
-      periodOfSlowestStep_InUS =
-          1000000.0 / sqrt(2.0 * acceleration_InStepsPerSecondPerSecond);
-      minimumPeriodForAStoppedMotion = periodOfSlowestStep_InUS / 2.8;
-    }
-
-      //
-      // determine the number of steps needed to go from the current speed down to a
-      // velocity of 0, Steps = Velocity^2 / (2 * Deceleration)
-      //
-      currentStepPeriodSquared = currentStepPeriod_InUS * currentStepPeriod_InUS;
-      decelerationDistance_InSteps = (long)round(
-          5E11 / (deceleration_InStepsPerSecondPerSecond * currentStepPeriodSquared));
-
-    // NextStepPeriod = CurrentStepPeriod(1 + acceleration * CurrentStepPeriod^2)
-    // NextStepPeriod = CurrentStepPeriod(1 - deceleration * CurrentStepPeriod^2)
-    */
 
 }
