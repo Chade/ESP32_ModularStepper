@@ -1,13 +1,14 @@
 #include "StepperLog.h"
 #include "StepperCore.h"
-#include "StepperDriver.h"
-#include "StepperGenerator.h"
+//#include "StepperDriver.h"
+#include "StepperDriver_MCPWM.h"
+//#include "StepperGenerator.h"
 
 
 //Stepper::Core core;
 //Stepper::Task task;
-Stepper::Driver driver(26,25,27,false);
-Stepper::Generator generator(driver);
+Stepper::DriverMCPWM driver(26, 25, 27);
+//Stepper::Generator generator(driver);
 
 // --- Simple Serial interface state ---
 static long g_velocity = 3000;   // steps per second (example)
@@ -41,11 +42,11 @@ static void runMove() {
   //                     (float)g_velocity,
   //                     10.0f,
   //                     10.0f,
-  //                     g_dir > 0 ? Stepper::Direction::CLOCKWISE : Stepper::Direction::COUNTERCLOCKWISE);
-  generator.run((float)g_velocity,
-                      1000.0f,
-                      1000.0f,
-                      g_dir > 0 ? Stepper::Direction::CLOCKWISE : Stepper::Direction::COUNTERCLOCKWISE);
+  //                     g_dir > 0 ? Stepper::Direction::Clockwise : Stepper::Direction::Counterclockwise);
+  // generator.run((float)g_velocity,
+  //                     1000.0f,
+  //                     1000.0f,
+  //                     g_dir > 0 ? Stepper::Direction::Clockwise : Stepper::Direction::Counterclockwise);
 }
 
 static bool parseDirToken(const char* v, int* outDir) {
@@ -134,19 +135,15 @@ void setup() {
 
   esp_log_level_set("*", ESP_LOG_INFO);
 
-  while (!Serial) { vTaskDelay(pdMS_TO_TICKS(100)); }
-  printHelp();
+  while (!Serial) { vTaskDelay(pdMS_TO_TICKS(1000)); }
+  //printHelp();
   //core.start();
 
-  driver.setTimings(2, 2, 1, 100000);
+  driver.init();
+  //generator.start();
+  //driver.start();
+  // generator.setVelocity(1.0f, 1000.0f, 1000.0f, Stepper::Direction::Clockwise);
   driver.start();
-  vTaskDelay(pdMS_TO_TICKS(100));
-  driver.enable();
-  vTaskDelay(pdMS_TO_TICKS(100));
-  driver.setDirection(Stepper::Direction::COUNTERCLOCKWISE);
-  generator.start();
-  // vTaskDelay(pdMS_TO_TICKS(1000));
-  // generator.setVelocity(1.0f, 1000.0f, 1000.0f, Stepper::Direction::CLOCKWISE);
 }
 
 void loop() {
@@ -154,18 +151,22 @@ void loop() {
   //esp_err_t err = Stepper::taskEventLoopPost(Stepper::TaskEventId::NEW_TASK_EVENT, &task, sizeof(struct Stepper::Task), 1000);
   //ESP_LOGE("Main", "Posting event %s", esp_err_to_name(err));
   
-  while (Serial.available() > 0) {
-    char c = (char)Serial.read();
-    if (c == '\n' || c == '\r') {
-      if (g_lineLen > 0) {
-        g_lineBuf[g_lineLen] = '\0';
-        processLine(g_lineBuf);
-        g_lineLen = 0;
-      }
-    } else if (g_lineLen < sizeof(g_lineBuf) - 1) {
-      g_lineBuf[g_lineLen++] = c;
-    }
-  }
-
+  // while (Serial.available() > 0) {
+  //   char c = (char)Serial.read();
+  //   if (c == '\n' || c == '\r') {
+  //     if (g_lineLen > 0) {
+  //       g_lineBuf[g_lineLen] = '\0';
+  //       processLine(g_lineBuf);
+  //       g_lineLen = 0;
+  //     }
+  //   } else if (g_lineLen < sizeof(g_lineBuf) - 1) {
+  //     g_lineBuf[g_lineLen++] = c;
+  //   }
+  // }
+  driver.startOnce();
   vTaskDelay(pdMS_TO_TICKS(100));
+  //driver.stop();
+  Serial.printf("onEmpty: %lu  onCmpr: %lu  onFull: %lu  onStop: %lu  \n", driver.onEmpty, driver.onCmpr, driver.onFull, driver.onStop);
+
+  vTaskDelay(pdMS_TO_TICKS(1000));
 }

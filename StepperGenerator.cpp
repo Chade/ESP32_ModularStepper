@@ -14,7 +14,7 @@ namespace Stepper {
         assert(m_taskQueueHandle != 0);
 
         // Create stepper task queue
-        m_stepQueueHandle = xQueueCreate(1, sizeof(struct StepperTask));
+        m_stepQueueHandle = xQueueCreate(2, sizeof(struct StepperTask));
         assert(m_stepQueueHandle != 0);
     }
 
@@ -48,8 +48,8 @@ namespace Stepper {
             timer_config.clk_src = GPTIMER_CLK_SRC_DEFAULT;
             timer_config.direction = GPTIMER_COUNT_UP;
             timer_config.resolution_hz = k_timerResolutionHz; // 1 MHz
-            timer_config.intr_priority = 0;
-            timer_config.flags.intr_shared = 1;
+            timer_config.intr_priority = 3;
+            timer_config.flags.intr_shared = 0;
             timer_config.flags.allow_pd = 0;
             timer_config.flags.backup_before_sleep = 0;
             ESP_ERROR_CHECK(gptimer_new_timer(&timer_config, &m_gptimer));
@@ -77,8 +77,9 @@ namespace Stepper {
             
 
             gptimer_alarm_config_t alarm_config;
-            alarm_config.alarm_count = period_us;
-            alarm_config.flags.auto_reload_on_alarm = false;
+            alarm_config.alarm_count = 30;
+            alarm_config.reload_count = 0;
+            alarm_config.flags.auto_reload_on_alarm = true;
 
             ESP_ERROR_CHECK(gptimer_set_alarm_action(m_gptimer, &alarm_config));
             ESP_ERROR_CHECK(gptimer_start(m_gptimer));
@@ -201,9 +202,9 @@ namespace Stepper {
             m_state.currentDirection = m_state.targetDirection;
         }
 
-        if (!compare_enums(m_state.state, State::RUNNING)) {
+        if (!compare_enums(m_state.state, State::Running)) {
             uint64_t period = computeStepPeriodUs(m_state.currentVelocity);
-            m_state.state = State::RUNNING;
+            m_state.state = State::Running;
             scheduleNextStep(period);
             ESP_LOGI(log_tag, "Scheduled first step with period %i us @ %.2f steps/s", period, m_state.currentVelocity);
         }
@@ -348,10 +349,10 @@ namespace Stepper {
     }
 
     void Generator::resetState() {
-        m_state.state = State::UNDEFINED; // movement state
+        m_state.state = State::Undefined; // movement state
 
-        m_state.currentDirection = Direction::NEUTRAL; // current direction
-        m_state.targetDirection  = Direction::NEUTRAL; // target direction
+        m_state.currentDirection = Direction::Neutral; // current direction
+        m_state.targetDirection  = Direction::Neutral; // target direction
 
         m_state.doDirectionChange = false; // request direction change
 
@@ -372,7 +373,7 @@ namespace Stepper {
     void IRAM_ATTR Generator::timerCallback(void* arg) {
         auto* self = static_cast<Generator*>(arg);
 
-        if (!compare_enums(self->m_state.state, State::RUNNING)) {
+        if (!compare_enums(self->m_state.state, State::Running)) {
             return;
         }
 
@@ -388,7 +389,6 @@ namespace Stepper {
 
     bool IRAM_ATTR Generator::gptimerOnAlarm(gptimer_handle_t timer, const gptimer_alarm_event_data_t* edata, void* user_ctx) {
         auto* self = static_cast<Generator*>(user_ctx);
-        
         bool ret = false;
 
         // Produce one step
@@ -399,21 +399,36 @@ namespace Stepper {
         }
 
         // Check stepper task queue
-        xHigherPriorityTaskWoken = pdFALSE;
-        StepperTask task;
-        if (xQueueReceiveFromISR(self->m_stepQueueHandle, (void*) &task, &xHigherPriorityTaskWoken)) {
-            gptimer_alarm_config_t alarm_config;
-            alarm_config.alarm_count = edata->alarm_value + task.period_us;
-            ESP_ERROR_CHECK(gptimer_set_alarm_action(timer, &alarm_config));
-        }
-        else {
-            // Stop timer and reset
-            ESP_ERROR_CHECK(gptimer_stop(timer));
-            ESP_ERROR_CHECK(gptimer_set_raw_count(timer, 0));
-        }
-        if (xHigherPriorityTaskWoken == pdTRUE) {
-            ret = true;
-        }
+        // StepperTask task;
+        // xHigherPriorityTaskWoken = pdFALSE;
+        // if(xQueueReceiveFromISR(self->m_stepQueueHandle, (void*) &task, &xHigherPriorityTaskWoken)) {
+        //     gptimer_alarm_config_t alarm_config;
+        //     alarm_config.alarm_count = 20;
+        //     alarm_config.reload_count = 0;
+        //     alarm_config.flags.auto_reload_on_alarm = true;
+        //     ESP_ERROR_CHECK(gptimer_set_alarm_action(timer, &alarm_config));
+
+        //     // gptimer_alarm_config_t alarm_config;
+        //     // alarm_config.alarm_count = edata->alarm_value + task.period_us;
+        //     // alarm_config.flags.auto_reload_on_alarm = false;
+        //     // ESP_ERROR_CHECK(gptimer_set_alarm_action(timer, &alarm_config)); 
+        // }
+        // if (xHigherPriorityTaskWoken == pdTRUE) {
+        //     ret = true;
+        // }
+
+
+
+        // if () {
+        //     gptimer_alarm_config_t alarm_config;
+        //     alarm_config.alarm_count = edata->alarm_value + task.period_us;
+        //     ESP_ERROR_CHECK(gptimer_set_alarm_action(timer, &alarm_config));
+        // }
+        // else {
+        //     // Stop timer and reset
+        //     ESP_ERROR_CHECK(gptimer_stop(timer));
+        //     ESP_ERROR_CHECK(gptimer_set_raw_count(timer, 0));
+        // }
 
     //     // // Update the alarm value
     //     // gptimer_set_alarm_action(timer, &alarm_config);
@@ -428,11 +443,11 @@ namespace Stepper {
             if (self->m_state.targetVelocity <= 0.0f) {
                 // Decelerate to stop
                 if (self->m_state.currentVelocity > 0.0f) {
-                    self->m_state.state = State::DECELERATING;
+                    self->m_state.state = State::Decelerating;
                     self->m_state.currentVelocity = std::max(0.0f, self->m_state.currentVelocity - self->m_state.deceleration * dt);
                 }
                 if (self->m_state.currentVelocity <= 0.0f) {
-                    self->m_state.state = State::STOPPED;
+                    self->m_state.state = State::Stopped;
                     ESP_ERROR_CHECK(gptimer_stop(timer));
                     return ret;
                 }
@@ -440,12 +455,12 @@ namespace Stepper {
                 if (self->m_state.currentDirection != self->m_state.targetDirection) {
                     // Need to change direction: decelerate to stand-still first
                     if (self->m_state.currentVelocity > 0.0f) {
-                        self->m_state.state = State::DECELERATING;
+                        self->m_state.state = State::Decelerating;
                         self->m_state.currentVelocity = std::max(0.0f, self->m_state.currentVelocity - self->m_state.deceleration * dt);
                     }
                     if (self->m_state.currentVelocity <= 0.0f) {
                         // Reached stand-still, change direction
-                        self->m_state.state = State::RUNNING;
+                        self->m_state.state = State::Running;
 
                         xHigherPriorityTaskWoken = pdFALSE;
                         self->m_driver.setDirectionFromISR(self->m_state.targetDirection, &xHigherPriorityTaskWoken);
@@ -461,19 +476,19 @@ namespace Stepper {
                 else {
                     // Move towards target velocity
                     if (self->m_state.currentVelocity < self->m_state.targetVelocity) {
-                        self->m_state.state = State::ACCELERATING;
+                        self->m_state.state = State::Accelerating;
                         //state.currentVelocity = std::min(state.targetVelocity, state.currentVelocity + state.acceleration * dt);
                         float newVelocity = self->m_state.currentVelocity + self->m_state.acceleration * dt;
                         self->m_state.currentVelocity = (self->m_state.targetVelocity < newVelocity) ? self->m_state.targetVelocity : newVelocity;
                     }
                     else if (self->m_state.currentVelocity > self->m_state.targetVelocity) {
-                        self->m_state.state = State::DECELERATING;
+                        self->m_state.state = State::Decelerating;
                         float newVelocity = self->m_state.currentVelocity - self->m_state.acceleration * dt;
                         //state.currentVelocity = std::max(state.targetVelocity, state.currentVelocity - state.deceleration * dt);
                         self->m_state.currentVelocity = (self->m_state.targetVelocity > newVelocity) ? self->m_state.targetVelocity : newVelocity;
                     }
                     else {
-                        self->m_state.state = State::RUNNING;
+                        self->m_state.state = State::Running;
                     }
                 }
             }
@@ -485,22 +500,22 @@ namespace Stepper {
             // Determine phase by stepsDone
             if (self->m_state.stepsDone <= self->m_state.stepsAcc) {
                 // Accelerating: v^2 = v0^2 + 2 a s; step-by-step approx
-                self->m_state.state = State::ACCELERATING;
+                self->m_state.state = State::Accelerating;
                 //state.currentVelocity = std::min(state.targetVelocity, state.currentVelocity + state.acceleration * dt);
                 float newVelocity = self->m_state.currentVelocity + self->m_state.acceleration * dt;
                 self->m_state.currentVelocity = (self->m_state.targetVelocity < newVelocity) ? self->m_state.targetVelocity : newVelocity;
             } else if (self->m_state.stepsDone <= (self->m_state.stepsAcc + self->m_state.stepsConst)) {
                 // Constant
-                self->m_state.state = State::RUNNING;
+                self->m_state.state = State::Running;
                 self->m_state.currentVelocity = self->m_state.targetVelocity;
             } else if (self->m_state.stepsDone <= (self->m_state.stepsAcc + self->m_state.stepsConst + self->m_state.stepsDec)) {
                 // Decelerating
-                self->m_state.state = State::DECELERATING;
+                self->m_state.state = State::Decelerating;
                 self->m_state.currentVelocity = std::max(0.0f, self->m_state.currentVelocity - self->m_state.deceleration * dt);
             }
 
             if (self->m_state.stepsDone >= self->m_state.stepsTotal) {
-                self->m_state.state = State::STOPPED;
+                self->m_state.state = State::Stopped;
                 ESP_ERROR_CHECK(gptimer_stop(timer));
                 return ret;
             }
@@ -533,22 +548,24 @@ namespace Stepper {
         return ret;
     }
 
-    void Generator::generatorTask(void* args) {
+    void IRAM_ATTR Generator::generatorTask(void* args) {
         auto* self = static_cast<Generator*>(args);
 
         for (;;) {
             TickType_t waitTicks = 0;
-            if (!compare_enums(self->m_state.state, State::RUNNING)) {
+            if (!compare_enums(self->m_state.state, State::Running)) {
                 // If not running wait for new task
+                ESP_LOGI(log_tag, "Waiting for new generator task...");
                 waitTicks = portMAX_DELAY;
             }
 
             // Check queue for new task
             GeneratorTask generatorTask;
-            if (xQueueReceive(self->m_taskQueueHandle, &generatorTask, waitTicks) == pdTRUE) {
+            if (xQueueReceive(self->m_taskQueueHandle, &generatorTask, waitTicks)) {
                 if (self->initializeStateBeforeStep(generatorTask, self->m_state)) {
-                    // Enable driver
-                    self->m_driver.enable();
+
+                    // Reset stepper queue
+                    xQueueReset(self->m_stepQueueHandle);
 
                     // Set driver direction
                     self->m_driver.setDirection(self->m_state.targetDirection);
@@ -557,16 +574,16 @@ namespace Stepper {
                     // Calc first step period
                     uint64_t period_us = self->computeStepPeriodUs(self->m_state.currentVelocity);
                     if (period_us > 0) {
-                        self->m_state.state = State::RUNNING;
-
-                        // Execute first step
-                        self->m_driver.doStep();
+                        self->m_state.state = State::Running;
 
                         // Start timer
                         self->rearmTimer(period_us);
+
+                        // Execute first step
+                        self->m_driver.doStep();
                     }
                     else {
-                        self->m_state.state = State::STOPPED;
+                        self->m_state.state = State::Stopped;
                     }
 
                 }
@@ -594,7 +611,7 @@ namespace Stepper {
     void Generator::scheduleNextStep(uint64_t period_us) {
         if (period_us == 0) {
             stopTimer();
-            m_state.state = State::STOPPED;
+            m_state.state = State::Stopped;
             return;
         }
 
@@ -624,23 +641,23 @@ namespace Stepper {
             if (state.targetVelocity <= 0.0f) {
                 // Decelerate to stop
                 if (state.currentVelocity > 0.0f) {
-                    state.state = State::DECELERATING;
+                    state.state = State::Decelerating;
                     state.currentVelocity = std::max(0.0f, state.currentVelocity - state.deceleration * dt);
                 }
                 if (state.currentVelocity <= 0.0f) {
-                    state.state = State::STOPPED;
+                    state.state = State::Stopped;
                     return false;
                 }
             } else {
                 if (state.currentDirection != state.targetDirection) {
                     // Need to change direction: decelerate to stand-still first
                     if (state.currentVelocity > 0.0f) {
-                        state.state = State::DECELERATING;
+                        state.state = State::Decelerating;
                         state.currentVelocity = std::max(0.0f, state.currentVelocity - state.deceleration * dt);
                     }
                     if (state.currentVelocity <= 0.0f) {
                         // Reached stand-still, change direction
-                        state.state = State::RUNNING;
+                        state.state = State::Running;
                         state.doDirectionChange = true;
                         state.currentVelocity = minVelocity;
                     }
@@ -648,19 +665,19 @@ namespace Stepper {
                 else {
                     // Move towards target velocity
                     if (state.currentVelocity < state.targetVelocity) {
-                        state.state = State::ACCELERATING;
+                        state.state = State::Accelerating;
                         //state.currentVelocity = std::min(state.targetVelocity, state.currentVelocity + state.acceleration * dt);
                         float newVelocity = state.currentVelocity + state.acceleration * dt;
                         state.currentVelocity = (state.targetVelocity < newVelocity) ? state.targetVelocity : newVelocity;
                     }
                     else if (state.currentVelocity > state.targetVelocity) {
-                        state.state = State::DECELERATING;
+                        state.state = State::Decelerating;
                         float newVelocity = state.currentVelocity - state.acceleration * dt;
                         //state.currentVelocity = std::max(state.targetVelocity, state.currentVelocity - state.deceleration * dt);
                         state.currentVelocity = (state.targetVelocity > newVelocity) ? state.targetVelocity : newVelocity;
                     }
                     else {
-                        state.state = State::RUNNING;
+                        state.state = State::Running;
                     }
                 }
             }
@@ -672,22 +689,22 @@ namespace Stepper {
             // Determine phase by stepsDone
             if (state.stepsDone <= state.stepsAcc) {
                 // Accelerating: v^2 = v0^2 + 2 a s; step-by-step approx
-                state.state = State::ACCELERATING;
+                state.state = State::Accelerating;
                 //state.currentVelocity = std::min(state.targetVelocity, state.currentVelocity + state.acceleration * dt);
                 float newVelocity = state.currentVelocity + state.acceleration * dt;
                 state.currentVelocity = (state.targetVelocity < newVelocity) ? state.targetVelocity : newVelocity;
             } else if (state.stepsDone <= (state.stepsAcc + state.stepsConst)) {
                 // Constant
-                state.state = State::RUNNING;
+                state.state = State::Running;
                 state.currentVelocity = state.targetVelocity;
             } else if (state.stepsDone <= (state.stepsAcc + state.stepsConst + state.stepsDec)) {
                 // Decelerating
-                state.state = State::DECELERATING;
+                state.state = State::Decelerating;
                 state.currentVelocity = std::max(0.0f, state.currentVelocity - state.deceleration * dt);
             }
 
             if (state.stepsDone >= state.stepsTotal) {
-                state.state = State::STOPPED;
+                state.state = State::Stopped;
                 return false;
             }
         }

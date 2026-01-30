@@ -92,7 +92,7 @@ namespace Stepper
                 "StepTask",                  /* Task name (max. 16 characters by default) */
                 2048,                        /* Stack size in bytes */
                 this,                        /* Parameter passed as input of the task */
-                10,                          /* Task priority */
+                12,                          /* Task priority */
                 &m_taskHandle,               /* Task handle */
                 0                            /* CPU core to use */
             );
@@ -173,19 +173,19 @@ namespace Stepper
     void Driver::setDirection(Direction direction)
     {
         uint32_t directionBit;
-        if (direction == Direction::CLOCKWISE)
+        if (direction == Direction::Clockwise)
         {
-            ESP_LOGI(log_tag, "CLOCKWISE");
+            ESP_LOGI(log_tag, "Clockwise");
             directionBit = m_inverseDirection << 2;
         }
-        else if (direction == Direction::COUNTERCLOCKWISE)
+        else if (direction == Direction::Counterclockwise)
         {
-            ESP_LOGI(log_tag, "COUNTERCLOCKWISE");
+            ESP_LOGI(log_tag, "Counterclockwise");
             directionBit = !m_inverseDirection << 2;
         }
         else
         {
-            ESP_LOGI(log_tag, "NEUTRAL");
+            ESP_LOGI(log_tag, "Neutral");
             disable();
             return;
         }
@@ -203,11 +203,11 @@ namespace Stepper
     void IRAM_ATTR Driver::setDirectionFromISR(Direction direction, BaseType_t *pxHigherPriorityTaskWoken)
     {
         uint32_t directionBit;
-        if (direction == Direction::CLOCKWISE)
+        if (direction == Direction::Clockwise)
         {
             directionBit = m_inverseDirection << 2;
         }
-        else if (direction == Direction::COUNTERCLOCKWISE)
+        else if (direction == Direction::Counterclockwise)
         {
             directionBit = !m_inverseDirection << 2;
         }
@@ -229,29 +229,29 @@ namespace Stepper
     {
         if (!isEnabled())
         {
-            return Direction::NEUTRAL;
+            return Direction::Neutral;
         }
 
         if (gpio_get_level((gpio_num_t)m_pinDirection) == m_inverseDirection)
-            return Direction::CLOCKWISE;
+            return Direction::Clockwise;
         else
-            return Direction::COUNTERCLOCKWISE;
+            return Direction::Counterclockwise;
     }
 
     Direction Driver::changeDirection()
     {
         if (!isEnabled())
         {
-            return Direction::NEUTRAL;
+            return Direction::Neutral;
         }
 
         uint8_t direction = !gpio_get_level((gpio_num_t)m_pinDirection);
         ESP_ERROR_CHECK(gpio_set_level((gpio_num_t)m_pinDirection, direction));
 
         if (direction == m_inverseDirection)
-            return Direction::CLOCKWISE;
+            return Direction::Clockwise;
         else
-            return Direction::COUNTERCLOCKWISE;
+            return Direction::Counterclockwise;
     }
 
     void Driver::enable()

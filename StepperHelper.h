@@ -21,21 +21,21 @@ namespace Stepper
 
     enum class Direction : int8_t
     {
-        CLOCKWISE = -1,
-        NEUTRAL = 0,
-        COUNTERCLOCKWISE = 1
+        Clockwise = -1,
+        Neutral = 0,
+        Counterclockwise = 1
     };
 
     enum class State : uint8_t
     {
-        UNDEFINED = 0,
-        RUNNING = 1,
-        ACCELERATING = 3,
-        DECELERATING = 5,
-        PAUSED = 16,
-        STOPPED = 32,
-        INHIBITED = 96,
-        EMERGENCYSTOP = 224
+        Undefined = 0,
+        Running = 1,
+        Accelerating = 3,
+        Decelerating = 5,
+        Paused = 16,
+        Stopped = 32,
+        Inhibited = 96,
+        EmergencyStop = 224
     };
 }
 

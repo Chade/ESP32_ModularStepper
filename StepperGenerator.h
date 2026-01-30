@@ -21,7 +21,7 @@ namespace Stepper
             float velocity = 0.0f;
             float acceleration = 0.0f;
             float deceleration = 0.0f;
-            Direction direction = Direction::NEUTRAL;
+            Direction direction = Direction::Neutral;
         };
 
         bool run(const GeneratorTask& task, uint32_t waitFor_ms = portMAX_DELAY);
@@ -48,10 +48,10 @@ namespace Stepper
         };
 
         struct GeneratorState {
-            State state = State::UNDEFINED; // movement state
+            State state = State::Undefined; // movement state
 
-            Direction currentDirection = Direction::NEUTRAL; // current direction
-            Direction targetDirection  = Direction::NEUTRAL; // target direction
+            Direction currentDirection = Direction::Neutral; // current direction
+            Direction targetDirection  = Direction::Neutral; // target direction
 
             bool doDirectionChange = false; // request direction change
 
