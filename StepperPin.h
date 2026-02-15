@@ -77,6 +77,14 @@ namespace Stepper {
             return level;
         }
 
+        bool getLevelEnable() const {
+            return enableLevel_;
+        }
+
+        bool getLevelDisable() const {
+            return disableLevel_;
+        }
+        
         bool toggle() {
             bool level = !getLevel();
             setLevel(level);

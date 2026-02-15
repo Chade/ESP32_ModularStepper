@@ -9,7 +9,7 @@
 #include "StepperHelper.h"
 
 namespace Stepper {
-    using DriverCallback = std::function<bool(uint64_t& stepCount, uint32_t& pulsePeriod_ns)>;
+    using DriverCallback = std::function<uint32_t (uint32_t stepsNew, uint32_t pulsePeriod_ns, void* user_ctx)>;
 
     class DriverInterface {
     public:
@@ -35,9 +35,11 @@ namespace Stepper {
         virtual Direction changeDirection();
         virtual Direction getDirection() const;
 
-        virtual void setTiming(uint32_t stepPulseWidthHigh_ns, uint32_t stepPulseWidthLow_ns, uint32_t directionDelay_ns, uint32_t enableDelay_ns, uint32_t maxPulsePeriod_ns);
+        virtual void setTiming(uint32_t minPulseWidthHigh_ns, uint32_t minPulseWidthLow_ns, uint32_t directionDelay_ns, uint32_t enableDelay_ns, uint32_t maxPulsePeriod_ns);
         virtual uint32_t getMinPulsePeriodNs() const;
         virtual uint32_t getMaxPulsePeriodNs() const;
+        virtual void setPulsePeriodNs(uint32_t pulsePeriod_ns);
+        virtual uint32_t getPulsePeriod() const;
 
         virtual void setMicrosteps(uint8_t microsteps);
         virtual uint8_t getMicrosteps() const;
@@ -48,26 +50,39 @@ namespace Stepper {
         virtual int64_t getStepsMissed() const;
         virtual void resetStepsMissed(uint64_t count = 0);
 
-        void registerCallbackOnStepDone(DriverCallback callback);
+        void registerCallbackOnStepDone(DriverCallback callback, void* user_ctx);
 
     protected:
         static void task(void *args);
-        virtual bool taskLoop(uint32_t notificationValue) = 0;
+        virtual void update(uint32_t stepsNew, uint32_t pulsePeriodNew) = 0;
 
         Pin pinEnable_;
         Pin pinStep_;
         Pin pinDirection_;
 
-        uint32_t stepPulseWidthHigh_ns_ {1000};
-        uint32_t stepPulseWidthLow_ns_ {1000};
-        uint32_t directionDelay_ns_ {1000};
-        uint32_t enableDelay_ns_ {1000};
-        uint32_t maxPulsePeriod_ns_ {1000000};
+        uint32_t minPulseWidthHigh_ns_ {1000};
+        uint32_t minPulseWidthLow_ns_ {1000};
+        uint32_t directionDelay_ns_ {200};
+        uint32_t enableDelay_ns_ {200};
+        uint32_t maxPulsePeriod_ns_ {13107000};
+        uint32_t pulsePeriod_ns_ {0};
 
         uint8_t microsteps_ {1};
 
         uint64_t numStepsDone_ {0};
         uint64_t numStepsMissed_ {0};
+
+        struct NotificationData {
+            uint32_t doStep : 29;
+            uint8_t doDirectionChange : 1;
+            uint8_t directionCW :1;
+            uint8_t directionCCW : 1;
+        };
+
+        union Notification {
+            NotificationData data;
+            uint32_t raw;
+        };
 
         static constexpr uint32_t ulDirectionBitmaskCW_ = 1UL << 30;
         static constexpr uint32_t ulDirectionBitmaskCCW_ = 2UL << 30;
@@ -76,7 +91,8 @@ namespace Stepper {
 
         TaskHandle_t taskHandle_ {nullptr};
 
-        DriverCallback callbackOnStepDone_ = [this](uint64_t&, uint32_t&) { return true; };
+        void* callbackOnStepDoneUserCtx_ {nullptr};
+        DriverCallback callbackOnStepDone_ = [this](uint32_t, uint32_t, void*) -> uint32_t { return pulsePeriod_ns_; };
     };
 }
 

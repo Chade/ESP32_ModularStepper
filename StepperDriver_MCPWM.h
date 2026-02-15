@@ -1,3 +1,4 @@
+#include "driver/mcpwm_types.h"
 #ifndef STEPPER_DRIVER_MCPWM_H
 #define STEPPER_DRIVER_MCPWM_H
 
@@ -14,34 +15,42 @@ namespace Stepper
 
         ~DriverMCPWM();
 
-        void init();
-        void start();
+        void init() override;
+        void start() override;
+        void stop() override;
         void startOnce();
-        void stop();
+        void startSync();
 
-        uint32_t onFull {0};
-        uint32_t onEmpty {0};
-        uint32_t onStop {0};
-        uint32_t onCmpr {0};
+
+        uint32_t onStepFull {0};
+        uint32_t onStepEmpty {0};
+        uint32_t onStepStop {0};
+
+        uint32_t onUpdateFull {0};
+        uint32_t onUpdateEmpty {0};
+        uint32_t onUpdateStop {0};
 
     private:
-        bool taskLoop(uint32_t notificationValue);
+        inline uint32_t timerTicksFromNs(uint32_t timeNs, uint32_t timerResolutionHz = timerResolutionHz_) {
+            float ticks = (float)timeNs * (float)timerResolutionHz / 2e9f;
+            return static_cast<uint32_t>(ticks);
+        };
+
+        inline uint32_t timerTicksToNs(uint32_t ticks, uint32_t timerResolutionHz = timerResolutionHz_) {
+            double timeNs = (float)ticks * 2e9f / (float)timerResolutionHz;
+            return static_cast<uint32_t>(timeNs);
+        };
+        
+        void update(uint32_t stepsNew, uint32_t pulsePeriodNew) override;
         static bool comperatorCallbackOnReach(mcpwm_cmpr_handle_t comparator, const mcpwm_compare_event_data_t* edata, void* user_ctx);
-        static bool timerCallbackOnFull(mcpwm_timer_handle_t timer, const mcpwm_timer_event_data_t* edata, void* user_ctx);
-        static bool timerCallbackOnEmpty(mcpwm_timer_handle_t timer, const mcpwm_timer_event_data_t* edata, void* user_ctx);
-        static bool timerCallbackOnStop(mcpwm_timer_handle_t timer, const mcpwm_timer_event_data_t* edata, void* user_ctx);
-
-        inline uint32_t timerTicksFromNs(uint32_t timeNs) {
-            return timeNs * timerResolutionHz_ / 1e9f;
-        };
-
-        inline uint32_t timerTicksToNs(uint32_t ticks) {
-            return ticks * 1e9f / timerResolutionHz_;
-        };
+        static bool stepTimerCallbackOnFull(mcpwm_timer_handle_t timer, const mcpwm_timer_event_data_t* edata, void* user_ctx);
+        static bool stepTimerCallbackOnEmpty(mcpwm_timer_handle_t timer, const mcpwm_timer_event_data_t* edata, void* user_ctx);
+        static bool stepTimerCallbackOnStop(mcpwm_timer_handle_t timer, const mcpwm_timer_event_data_t* edata, void* user_ctx);
 
         static constexpr uint32_t timerResolutionHz_ = 10'000'000;
+        static constexpr const char* log_tag = "Driver";
 
-        mcpwm_timer_handle_t timerHandle_ {nullptr};
+        mcpwm_timer_handle_t stepTimerHandle_ {nullptr};
         mcpwm_oper_handle_t  operatorHandle_ {nullptr};
         mcpwm_cmpr_handle_t  comparatorHandle_ {nullptr};
         mcpwm_gen_handle_t   generatorHandle_ {nullptr};
