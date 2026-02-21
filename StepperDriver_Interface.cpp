@@ -41,7 +41,7 @@ namespace Stepper {
 
         for(;;) {
             Notification notification;
-            if (xTaskNotifyWait(0UL, ~0UL, &notification.raw, portMAX_DELAY) != pdTRUE) {
+            if (xTaskNotifyWait(0UL, ~0UL, &notification.raw, pdMS_TO_TICKS(4)) != pdTRUE) {
                 continue; // Timeout or error
             }
 

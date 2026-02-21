@@ -16,14 +16,24 @@ namespace Stepper {
     }
 
     void DriverMCPWM::update(uint32_t stepsNew, uint32_t pulsePeriodNew) {
-        ESP_ERROR_CHECK(mcpwm_timer_set_period(stepTimerHandle_, timerTicksFromNs(pulsePeriodNew)));
+        // ESP_ERROR_CHECK(mcpwm_timer_set_period(stepTimerHandle_, timerTicksFromNs(pulsePeriodNew)));
+        StepTask task;
+        task.pulsePeriodTicks = timerTicksFromNs(pulsePeriodNew);
+
+        xQueueSend(taskQueueHandle_, &task, portMAX_DELAY);
     }
 
     bool IRAM_ATTR DriverMCPWM::comperatorCallbackOnReach(mcpwm_cmpr_handle_t comparator, const mcpwm_compare_event_data_t* edata, void* user_ctx) {
         DriverMCPWM* self = static_cast<DriverMCPWM*>(user_ctx);
         
+        StepTask task;
         BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-        self->doStepFromISR(&xHigherPriorityTaskWoken);
+        if(xQueueReceive(self->taskQueueHandle_, &task, 0)) {
+            mcpwm_timer_set_period(self->stepTimerHandle_, task.pulsePeriodTicks);
+        }
+        else {
+            self->doStepFromISR(&xHigherPriorityTaskWoken);
+        }
         return xHigherPriorityTaskWoken;
     }
 
@@ -47,6 +57,8 @@ namespace Stepper {
     }
 
     void DriverMCPWM::init() {
+        taskQueueHandle_ = xQueueCreate(32, sizeof(StepTask));
+
         mcpwm_timer_config_t stepTimerConfig;
         stepTimerConfig.group_id = 0;
         stepTimerConfig.clk_src = MCPWM_TIMER_CLK_SRC_DEFAULT;

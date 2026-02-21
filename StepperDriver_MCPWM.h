@@ -3,6 +3,7 @@
 #define STEPPER_DRIVER_MCPWM_H
 
 #include <driver/mcpwm_prelude.h>
+#include <freertos/queue.h>
 #include "StepperDriver_Interface.h"
 
 
@@ -21,14 +22,10 @@ namespace Stepper
         void startOnce();
         void startSync();
 
-
+        uint32_t stepsToDo {0};
         uint32_t onStepFull {0};
         uint32_t onStepEmpty {0};
         uint32_t onStepStop {0};
-
-        uint32_t onUpdateFull {0};
-        uint32_t onUpdateEmpty {0};
-        uint32_t onUpdateStop {0};
 
     private:
         inline uint32_t timerTicksFromNs(uint32_t timeNs, uint32_t timerResolutionHz = timerResolutionHz_) {
@@ -41,6 +38,7 @@ namespace Stepper
             return static_cast<uint32_t>(timeNs);
         };
         
+        static void task(void* args);
         void update(uint32_t stepsNew, uint32_t pulsePeriodNew) override;
         static bool comperatorCallbackOnReach(mcpwm_cmpr_handle_t comparator, const mcpwm_compare_event_data_t* edata, void* user_ctx);
         static bool stepTimerCallbackOnFull(mcpwm_timer_handle_t timer, const mcpwm_timer_event_data_t* edata, void* user_ctx);
@@ -49,6 +47,8 @@ namespace Stepper
 
         static constexpr uint32_t timerResolutionHz_ = 10'000'000;
         static constexpr const char* log_tag = "Driver";
+
+        QueueHandle_t taskQueueHandle_ {nullptr};
 
         mcpwm_timer_handle_t stepTimerHandle_ {nullptr};
         mcpwm_oper_handle_t  operatorHandle_ {nullptr};

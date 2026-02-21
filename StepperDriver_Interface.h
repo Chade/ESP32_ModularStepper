@@ -72,6 +72,11 @@ namespace Stepper {
         uint64_t numStepsDone_ {0};
         uint64_t numStepsMissed_ {0};
 
+        struct StepTask {
+            uint32_t steps;
+            uint32_t pulsePeriodTicks;
+        };
+
         struct NotificationData {
             uint32_t doStep : 29;
             uint8_t doDirectionChange : 1;
