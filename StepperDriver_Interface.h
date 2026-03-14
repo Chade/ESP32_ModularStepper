@@ -9,7 +9,7 @@
 #include "StepperHelper.h"
 
 namespace Stepper {
-    using DriverCallback = std::function<uint32_t (uint32_t stepsNew, uint32_t pulsePeriod_ns, void* user_ctx)>;
+    using DriverCallback = std::function<float (uint32_t stepsNew, float pulsePeriod_us, void* user_ctx)>;
 
     class DriverInterface {
     public:
@@ -35,37 +35,37 @@ namespace Stepper {
         virtual Direction changeDirection();
         virtual Direction getDirection() const;
 
-        virtual void setTiming(uint32_t minPulseWidthHigh_ns, uint32_t minPulseWidthLow_ns, uint32_t directionDelay_ns, uint32_t enableDelay_ns, uint32_t maxPulsePeriod_ns);
-        virtual uint32_t getMinPulsePeriodNs() const;
-        virtual uint32_t getMaxPulsePeriodNs() const;
-        virtual void setPulsePeriodNs(uint32_t pulsePeriod_ns);
-        virtual uint32_t getPulsePeriod() const;
+        virtual void setTiming(float minPulseWidthHigh_us, float minPulseWidthLow_us, float directionDelay_us, float enableDelay_us, float maxPulsePeriod_us);
+        virtual float getMinPulsePeriodUs() const;
+        virtual float getMaxPulsePeriodUs() const;
+        virtual void setPulsePeriodUs(float pulsePeriod_us);
+        virtual float getPulsePeriodUs() const;
 
         virtual void setMicrosteps(uint8_t microsteps);
         virtual uint8_t getMicrosteps() const;
 
-        virtual int64_t getSteps() const;
+        virtual uint64_t getSteps() const;
         virtual void resetSteps(uint64_t count = 0);
 
-        virtual int64_t getStepsMissed() const;
+        virtual uint64_t getStepsMissed() const;
         virtual void resetStepsMissed(uint64_t count = 0);
 
         void registerCallbackOnStepDone(DriverCallback callback, void* user_ctx);
 
     protected:
         static void task(void *args);
-        virtual void update(uint32_t stepsNew, uint32_t pulsePeriodNew) = 0;
+        virtual void update(uint32_t stepsNew, float pulsePeriodNew) = 0;
 
         Pin pinEnable_;
         Pin pinStep_;
         Pin pinDirection_;
 
-        uint32_t minPulseWidthHigh_ns_ {1000};
-        uint32_t minPulseWidthLow_ns_ {1000};
-        uint32_t directionDelay_ns_ {200};
-        uint32_t enableDelay_ns_ {200};
-        uint32_t maxPulsePeriod_ns_ {13107000};
-        uint32_t pulsePeriod_ns_ {0};
+        float minPulseWidthHigh_us_ {1.0f};
+        float minPulseWidthLow_us_ {1.0f};
+        float directionDelay_us_ {0.2f};
+        float enableDelay_us_ {0.2f};
+        float maxPulsePeriod_us_ {13107.0f};
+        float pulsePeriod_us_ {0.0f};
 
         uint8_t microsteps_ {1};
 
@@ -92,7 +92,7 @@ namespace Stepper {
         TaskHandle_t taskHandle_ {nullptr};
 
         void* callbackOnStepDoneUserCtx_ {nullptr};
-        DriverCallback callbackOnStepDone_ = [this](uint32_t, uint32_t, void*) -> uint32_t { return pulsePeriod_ns_; };
+        DriverCallback callbackOnStepDone_ = [this](uint32_t, float, void*) -> float { return pulsePeriod_us_; };
     };
 }
 

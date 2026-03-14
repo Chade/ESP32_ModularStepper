@@ -31,17 +31,25 @@ namespace Stepper
         uint32_t onUpdateStop {0};
 
     private:
-        inline uint32_t timerTicksFromNs(uint32_t timeNs, uint32_t timerResolutionHz = timerResolutionHz_) {
-            float ticks = (float)timeNs * (float)timerResolutionHz / 2e9f;
+        inline uint32_t timerTicksFromUs(float timeUs, uint32_t timerResolutionHz = timerResolutionHz_) {
+            float ticks = timeUs * static_cast<float>(timerResolutionHz) / 2e6f;
             return static_cast<uint32_t>(ticks);
         };
 
-        inline uint32_t timerTicksToNs(uint32_t ticks, uint32_t timerResolutionHz = timerResolutionHz_) {
-            double timeNs = (float)ticks * 2e9f / (float)timerResolutionHz;
-            return static_cast<uint32_t>(timeNs);
+        inline float timerTicksToUs(uint32_t ticks, uint32_t timerResolutionHz = timerResolutionHz_) {
+            return static_cast<float>(ticks) * 2e6f / static_cast<float>(timerResolutionHz);
+        };
+
+        inline uint32_t timerTicksFromNs(float timeNs, uint32_t timerResolutionHz = timerResolutionHz_) {
+            float ticks = timeNs * static_cast<float>(timerResolutionHz) / 2e9f;
+            return static_cast<uint32_t>(ticks);
+        };
+
+        inline float timerTicksToNs(uint32_t ticks, uint32_t timerResolutionHz = timerResolutionHz_) {
+            return static_cast<float>(ticks) * 2e9f / static_cast<float>(timerResolutionHz);
         };
         
-        void update(uint32_t stepsNew, uint32_t pulsePeriodNew) override;
+        void update(uint32_t stepsNew, float pulsePeriodNew) override;
         static bool comperatorCallbackOnReach(mcpwm_cmpr_handle_t comparator, const mcpwm_compare_event_data_t* edata, void* user_ctx);
         static bool stepTimerCallbackOnFull(mcpwm_timer_handle_t timer, const mcpwm_timer_event_data_t* edata, void* user_ctx);
         static bool stepTimerCallbackOnEmpty(mcpwm_timer_handle_t timer, const mcpwm_timer_event_data_t* edata, void* user_ctx);

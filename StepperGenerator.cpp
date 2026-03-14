@@ -1,7 +1,45 @@
 #include "StepperGenerator.h"
 #include "StepperLog.h"
 
+
 namespace Stepper {
+
+    // ---- 64-bit safe fixed-point arithmetic helpers ----
+    //
+    // UQ20x12 uses a 32-bit internal representation (20 integer + 12 fraction bits).
+    // At high velocities (200k steps/s) and accelerations (~10k steps/s²),
+    // naive fixed-point operations cause:
+    //   1) Overflow: dv * dv can reach 4e10, far exceeding UQ20x12 max (~1M)
+    //   2) Precision loss: dt = steps/velocity can be <1 LSB (1/4096) and truncate to 0
+    //
+    // These helpers use 64-bit intermediates to avoid both problems.
+
+    /// Compute dv = rate * steps / velocity using 64-bit intermediates.
+    /// Avoids the precision loss from computing the tiny dt = steps/velocity first.
+    /// Mathematically: dv = rate * steps / velocity
+    /// In raw representation: dv_raw = rate_raw * steps * Scale / velocity_raw
+    UQ20x12 Generator::computeDeltaV(UQ20x12 rate, uint32_t steps, UQ20x12 velocity) {
+        constexpr uint64_t scale = UQ20x12::Scale; // 2^12 = 4096
+        uint64_t vel_raw = static_cast<uint64_t>(velocity.getInternal());
+        if (vel_raw == 0) return UQ20x12::MaxValue;
+        uint64_t num = static_cast<uint64_t>(rate.getInternal()) * static_cast<uint64_t>(steps);
+        uint64_t result_raw = (num * scale) / vel_raw;
+        // Clamp to UQ20x12 range to prevent overflow on conversion back to 32-bit
+        constexpr uint64_t maxRaw = static_cast<uint64_t>(UQ20x12::MaxValue.getInternal());
+        return UQ20x12::fromInternal(static_cast<uint32_t>(result_raw > maxRaw ? maxRaw : result_raw));
+    }
+
+    /// Compute s = dv² / (2 * rate) as integer step count using 64-bit intermediates.
+    /// Avoids overflow from squaring large velocity deltas in 32-bit fixed-point.
+    /// Max safe dv: ~4.3 billion raw (full UQ20x12 range), since dv_raw² < 2^64.
+    uint64_t Generator::computeRampSteps(UQ20x12 dv, UQ20x12 rate) {
+        constexpr uint64_t scale = UQ20x12::Scale; // 2^12 = 4096
+        uint64_t dv_raw   = static_cast<uint64_t>(dv.getInternal());
+        uint64_t rate_raw = static_cast<uint64_t>(rate.getInternal());
+        if (rate_raw == 0) return 0;
+        // s = dv² / (2*a) = dv_raw² / (2 * Scale * a_raw)
+        return (dv_raw * dv_raw) / (2 * scale * rate_raw);
+    }
 
     Generator::Generator(DriverInterface& driver) : driver_(driver) {
         esp_log_level_set(log_tag, ESP_LOG_INFO);
@@ -21,16 +59,16 @@ namespace Stepper {
             state_.currentDirection = state_.targetDirection;
 
             // Calc first step period
-            uint32_t stepPeriod_ns = computeStepPeriodNs(state_.currentVelocity);
-            if (stepPeriod_ns > 0) {
+            UQ20x12 stepPeriod_us = computeStepPeriodUs(state_.currentVelocity);
+            if (stepPeriod_us > 0) {
                 // Compute number of steps to reach next velocity level
                 if (state_.state == State::Accelerating) {
-                    state_.stepsNextUpdate = state_.currentVelocity / state_.acceleration;
+                    state_.stepsNextUpdate = static_cast<uint32_t>(state_.currentVelocity / state_.acceleration);
                 }
                 else if (state_.state == State::Decelerating) {
-                    state_.stepsNextUpdate = state_.currentVelocity / state_.deceleration;
+                    state_.stepsNextUpdate = static_cast<uint32_t>(state_.currentVelocity / state_.deceleration);
                 }
-                driver_.setPulsePeriodNs(stepPeriod_ns);
+                driver_.setPulsePeriodUs(static_cast<float>(stepPeriod_us));
                 driver_.start();
                 return true;
             }
@@ -72,18 +110,22 @@ namespace Stepper {
         return run(task);
     }
 
-    uint32_t Generator::computeStepPeriodNs(float velocity) const {
+    UQ20x12 Generator::computeStepPeriodUs(UQ20x12 velocity) const {
         // Compute period from velocity
-        if (velocity <= 0.0f) {
-            return 0; // default 0 ns when stopped
+        if (velocity == 0.0) {
+            return 0.0; // default 0 us when stopped
         }
-        // period = 1e9 / v (nanoseconds per step)
-        uint32_t period_ns = 1e9 / velocity;
-        // Clamp to a sane range
-        period_ns = std::max(driver_.getMinPulsePeriodNs(), period_ns);
-        period_ns = std::min(driver_.getMaxPulsePeriodNs(), period_ns);
+        // period = 1e6 / v (microseconds per step)
+        UQ20x12 period_us = UQ20x12(1'000'000) / velocity;
 
-        return period_ns;
+        // Clamp to a sane range
+        UQ20x12 minPeriod_us = driver_.getMinPulsePeriodUs();
+        UQ20x12 maxPeriod_us = driver_.getMaxPulsePeriodUs();
+        
+        period_us = (period_us < minPeriod_us) ? minPeriod_us : period_us;
+        period_us = (period_us > maxPeriod_us) ? maxPeriod_us : period_us;
+
+        return period_us;
     }
 
     bool Generator::initializeStateBeforeStep(const GeneratorTask& task, GeneratorState& state) {
@@ -97,7 +139,7 @@ namespace Stepper {
         bool started = false;
 
         // Check if we are starting from stand-still
-        if (state.currentVelocity <= 0.0f && state.targetVelocity > 0.0f) {
+        if (state.currentVelocity == 0.0 && state.targetVelocity > 0.0) {
             state.currentVelocity = minVelocity_; // seed to avoid div by zero
             state.state = State::Accelerating;
             started = true;
@@ -106,20 +148,12 @@ namespace Stepper {
         if (state.stepsTotal > 0) {
             state.stepsDone = 0;
             
-            // Compute ramp distribution (start from currentVelocity)
-            // Steps to accelerate from currentVelocity to targetVelocity
-            auto calcStepsNeeded = [](float v0, float v1, float a) -> uint64_t {
-                if (a <= 0.0f)
-                    return 0;
-
-                float dv = std::max(0.0f, v1 - v0);
-                // s = 0.5 * dv^2 / a
-                uint64_t s = 0.5 * dv * dv / a;
-                return s;
-            };
-            
-            uint64_t stepsAcc = calcStepsNeeded(state.currentVelocity, state.targetVelocity, state.acceleration);
-            uint64_t stepsDec = calcStepsNeeded(state.targetVelocity, 0.0f, state.deceleration);
+            // Compute ramp distribution using 64-bit safe helpers (avoids dv*dv overflow)
+            UQ20x12 dvAcc = (state.targetVelocity > state.currentVelocity)
+                          ? (state.targetVelocity - state.currentVelocity)
+                          : (state.currentVelocity - state.targetVelocity);
+            uint64_t stepsAcc = (state.acceleration > 0.0) ? computeRampSteps(dvAcc, state.acceleration) : 0;
+            uint64_t stepsDec = (state.deceleration > 0.0) ? computeRampSteps(state.targetVelocity, state.deceleration) : 0;
 
             if (stepsAcc + stepsDec <= state.stepsTotal) {
                 state.stepsAcc   = stepsAcc;
@@ -143,7 +177,7 @@ namespace Stepper {
                     state.stepsDec = state.stepsTotal;
                     state.state = State::Decelerating;
                 } else {
-                    float ratio = static_cast<float>(std::min(stepsAcc, stepsDec)) / static_cast<float>(std::max(stepsAcc, stepsDec));
+                    double ratio = std::min(stepsAcc, stepsDec) / std::max(stepsAcc, stepsDec);
                     state.stepsAcc = state.stepsTotal * ratio;
                     state.stepsDec = state.stepsTotal - state.stepsAcc;
                     state.stepsConst = 0;
@@ -155,30 +189,47 @@ namespace Stepper {
     }
 
     bool Generator::advanceStateAfterStep(uint32_t steps, GeneratorState& state) {
-        
+        // NOTE: We do NOT compute dt = steps / velocity as an intermediate.
+        // At 200k steps/s, dt would be ~5µs = 0.02 LSBs in UQ20x12, truncating to zero.
+        // Instead, we compute dv = rate * steps / velocity directly via computeDeltaV(),
+        // which uses 64-bit intermediates to preserve precision.
 
-        float dt = steps / std::max(state.currentVelocity, minVelocity_);
         // Velocity mode
         if (state.stepsTotal == 0) {
-            if (state.targetVelocity <= 0.0f) {
+            if (state.targetVelocity == 0.0) {
                 // Decelerate to stop
-                if (state.currentVelocity > 0.0f) {
+                if (state.currentVelocity > 0.0) {
                     state.state = State::Decelerating;
-                    state.currentVelocity = std::max(0.0f, state.currentVelocity - state.deceleration * dt);
+
+                    UQ20x12 dv = computeDeltaV(state.deceleration, steps, state.currentVelocity);
+                    if (dv >= state.currentVelocity) {
+                        state.currentVelocity = 0.0;
+                    }
+                    else {
+                        state.currentVelocity = state.currentVelocity - dv;
+                    }
                 }
-                if (state.currentVelocity <= 0.0f) {
+                if (state.currentVelocity == 0.0) {
                     state.state = State::Stopped;
                     return false;
                 }
             } else {
                 if (state.currentDirection != state.targetDirection) {
                     // Need to change direction: decelerate to stand-still first
-                    if (state.currentVelocity > 0.0f) {
+                    if (state.currentVelocity > 0.0) {
                         state.state = State::Decelerating;
-                        state.currentVelocity = std::max(0.0f, state.currentVelocity - state.deceleration * dt);
+
+                        UQ20x12 dv = computeDeltaV(state.deceleration, steps, state.currentVelocity);
+                        if (dv >= state.currentVelocity) {
+                            state.currentVelocity = 0.0;
+                        }
+                        else {
+                            state.currentVelocity = state.currentVelocity - dv;
+                        }
                     }
-                    if (state.currentVelocity <= 0.0f) {
+                    if (state.currentVelocity == 0.0) {
                         // Reached stand-still, change direction
+                        // We will not transition to State:Stopped, to indicate the movement is not finished yet
                         state.state = State::Running;
                         state.doDirectionChange = true;
                         state.currentVelocity = minVelocity_;
@@ -188,11 +239,25 @@ namespace Stepper {
                     // Move towards target velocity
                     if (state.currentVelocity < state.targetVelocity) {
                         state.state = State::Accelerating;
-                        state.currentVelocity = std::min(state.targetVelocity, state.currentVelocity + state.acceleration * dt);
+
+                        UQ20x12 dv = computeDeltaV(state.acceleration, steps, state.currentVelocity);
+                        state.currentVelocity = state.currentVelocity + dv;
+                        if (state.currentVelocity > state.targetVelocity) {
+                            state.currentVelocity = state.targetVelocity;
+                        }
                     }
                     else if (state.currentVelocity > state.targetVelocity) {
                         state.state = State::Decelerating;
-                        state.currentVelocity = std::max(state.targetVelocity, state.currentVelocity - state.deceleration * dt);
+
+                        UQ20x12 dv = computeDeltaV(state.deceleration, steps, state.currentVelocity);
+                        if (dv >= state.currentVelocity) {
+                            state.currentVelocity = state.targetVelocity;
+                        } else {
+                            state.currentVelocity = state.currentVelocity - dv;
+                            if (state.currentVelocity < state.targetVelocity) {
+                                state.currentVelocity = state.targetVelocity;
+                            }
+                        }
                     }
                     else {
                         state.state = State::Running;
@@ -205,17 +270,29 @@ namespace Stepper {
             state.stepsDone += steps;
             // Determine phase by stepsDone
             if (state.stepsDone <= state.stepsAcc) {
-                // Accelerating: v^2 = v0^2 + 2 a s; step-by-step approx
+                // Accelerating
                 state.state = State::Accelerating;
-                state.currentVelocity = std::min(state.targetVelocity, state.currentVelocity + state.acceleration * dt);
+
+                UQ20x12 dv = computeDeltaV(state.acceleration, steps, state.currentVelocity);
+                state.currentVelocity = state.currentVelocity + dv;
+                if (state.currentVelocity > state.targetVelocity) {
+                    state.currentVelocity = state.targetVelocity;
+                }
             } else if (state.stepsDone <= (state.stepsAcc + state.stepsConst)) {
                 // Constant
                 state.state = State::Running;
+
                 state.currentVelocity = state.targetVelocity;
             } else if (state.stepsDone <= (state.stepsAcc + state.stepsConst + state.stepsDec)) {
                 // Decelerating
                 state.state = State::Decelerating;
-                state.currentVelocity = std::max(0.0f, state.currentVelocity - state.deceleration * dt);
+
+                UQ20x12 dv = computeDeltaV(state.deceleration, steps, state.currentVelocity);
+                if (dv >= state.currentVelocity) {
+                    state.currentVelocity = 0.0;
+                } else {
+                    state.currentVelocity = state.currentVelocity - dv;
+                }
             }
 
             if (state.stepsDone >= state.stepsTotal) {
@@ -239,10 +316,10 @@ namespace Stepper {
         state_.doDirectionChange = false; // request direction change
 
         // Kinematic state
-        state_.currentVelocity = 0; // steps/s
-        state_.targetVelocity  = 0; // steps/s
-        state_.acceleration    = 0; // steps/s^2
-        state_.deceleration    = 0; // steps/s^2
+        state_.currentVelocity = 0.0; // steps/s
+        state_.targetVelocity  = 0.0; // steps/s
+        state_.acceleration    = 0.0; // steps/s^2
+        state_.deceleration    = 0.0; // steps/s^2
 
         // Distance mode state
         state_.stepsTotal = 0; // total steps requested
@@ -256,10 +333,10 @@ namespace Stepper {
     }
 
     float Generator::getVelocity() const {
-        return state_.currentVelocity;
+        return static_cast<float>(state_.currentVelocity);
     }
 
-    uint32_t Generator::callbackOnStepDone(uint32_t stepsNew, uint32_t pulsePeriod_ns, void* user_ctx) {
+    float Generator::callbackOnStepDone(uint32_t stepsNew, float pulsePeriod_us, void* user_ctx) {
         Generator* self = static_cast<Generator*>(user_ctx);
         
         // Preserve steps for next cycle
@@ -277,27 +354,27 @@ namespace Stepper {
 
                 // Compute number of steps to reach next velocity level
                 if (self->state_.state == State::Accelerating) {
-                    self->state_.stepsNextUpdate = self->state_.currentVelocity / self->state_.acceleration;
+                    self->state_.stepsNextUpdate = static_cast<uint32_t>(self->state_.currentVelocity / self->state_.acceleration);
                 }
                 else if (self->state_.state == State::Decelerating) {
-                    self->state_.stepsNextUpdate = self->state_.currentVelocity / self->state_.deceleration;
+                    self->state_.stepsNextUpdate = static_cast<uint32_t>(self->state_.currentVelocity / self->state_.deceleration);
                 }
                 else {
-                    self->state_.stepsNextUpdate = self->state_.stepsConst;
+                    self->state_.stepsNextUpdate = static_cast<uint32_t>(self->state_.stepsConst);
                 }
 
                 // Reset step counter
                 self->state_.stepsCurrent = 0;
 
                 // Compute and return next step period
-                return self->computeStepPeriodNs(self->state_.currentVelocity);
+                return static_cast<float>(self->computeStepPeriodUs(self->state_.currentVelocity));
             }
             else {
                 self->driver_.stop();
                 return 0;
             }
         }
-        return pulsePeriod_ns;
+        return pulsePeriod_us;
     }
 
 

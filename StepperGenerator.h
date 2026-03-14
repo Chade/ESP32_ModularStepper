@@ -3,6 +3,10 @@
 
 #include "StepperDriver_Interface.h"
 #include <stdint.h>
+#include <FixedPoints.h>
+#include <FixedPointsCommon.h>
+
+using UQ20x12 = UFixed<20, 12>;
 
 namespace Stepper
 {
@@ -15,10 +19,10 @@ namespace Stepper
         ~Generator();
 
         struct GeneratorTask {
-            uint64_t steps = 0;
-            float velocity = 0;
-            float acceleration = 0;
-            float deceleration = 0;
+            uint32_t steps = 0;
+            UQ20x12 velocity = 0.0;
+            UQ20x12 acceleration = 0.0;
+            UQ20x12 deceleration = 0.0;
             Direction direction = Direction::Neutral;
         };
 
@@ -48,10 +52,10 @@ namespace Stepper
             bool doDirectionChange = false; // request direction change
 
             // Kinematic state
-            float currentVelocity = 0; // steps/s
-            float targetVelocity  = 0; // steps/s
-            float acceleration    = 0; // steps/s^2
-            float deceleration    = 0; // steps/s^2
+            UQ20x12 currentVelocity = 0.0; // steps/s
+            UQ20x12 targetVelocity  = 0.0; // steps/s
+            UQ20x12 acceleration    = 0.0; // steps/s^2
+            UQ20x12 deceleration    = 0.0; // steps/s^2
 
             // Distance mode state
             uint64_t stepsTotal = 0; // total steps requested
@@ -64,16 +68,19 @@ namespace Stepper
             uint32_t stepsNextUpdate = 0;
         } state_;
 
-        uint32_t computeStepPeriodNs(float velocity) const;
+        UQ20x12 computeStepPeriodUs(UQ20x12 velocity) const;
         bool initializeStateBeforeStep(const GeneratorTask&, GeneratorState& state);
         bool advanceStateAfterStep(uint32_t steps, GeneratorState& state);
 
-        static uint32_t callbackOnStepDone(uint32_t stepsNew, uint32_t pulsePeriod_ns, void* user_ctx);
+        static UQ20x12 computeDeltaV(UQ20x12 rate, uint32_t steps, UQ20x12 velocity);
+        static uint64_t computeRampSteps(UQ20x12 dv, UQ20x12 rate);
+
+        static float callbackOnStepDone(uint32_t stepsNew, float pulsePeriod_us, void* user_ctx);
 
         DriverInterface& driver_;
 
-        static constexpr float minVelocity_ = 1.0f;  // steps/s
-        static constexpr const char* log_tag = "Generator";
+        static constexpr UQ20x12 minVelocity_ {1.0};  // steps/s
+        static constexpr const char* log_tag {"Generator"};
     };
 } // namespace Stepper
 

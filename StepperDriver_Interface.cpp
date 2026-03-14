@@ -55,7 +55,7 @@ namespace Stepper {
                     self->setDirection(Direction::Counterclockwise);
                 }
 
-                uint32_t delay_us = static_cast<uint32_t>((self->directionDelay_ns_ + 999) / 1000); // ceil(ns/1000)
+                uint32_t delay_us = static_cast<uint32_t>(self->directionDelay_us_ + 0.999f);
                 esp_rom_delay_us(delay_us); // busy wait, as this should not happen frequently, it should be ok
             }
 
@@ -66,10 +66,10 @@ namespace Stepper {
 
                 // Execute callback
                 ESP_ERROR_CHECK(gpio_set_level((gpio_num_t)13, 1));
-                uint32_t newPulsePeriod_ns = self->callbackOnStepDone_(notification.data.doStep, self->pulsePeriod_ns_, self->callbackOnStepDoneUserCtx_);
+                float newPulsePeriod_us = self->callbackOnStepDone_(notification.data.doStep, self->pulsePeriod_us_, self->callbackOnStepDoneUserCtx_);
                 ESP_ERROR_CHECK(gpio_set_level((gpio_num_t)13, 0));
-                self->setPulsePeriodNs(newPulsePeriod_ns);
-                self->update(notification.data.doStep, newPulsePeriod_ns);
+                self->setPulsePeriodUs(newPulsePeriod_us);
+                self->update(notification.data.doStep, newPulsePeriod_us);
             }
             taskYIELD();
         }
@@ -194,31 +194,31 @@ namespace Stepper {
         }
     }
 
-    void DriverInterface::setTiming(uint32_t minPulseWidthHigh_ns, uint32_t minPulseWidthLow_ns, uint32_t directionDelay_ns, uint32_t enableDelay_ns, uint32_t maxPulsePeriod_ns)
+    void DriverInterface::setTiming(float minPulseWidthHigh_us, float minPulseWidthLow_us, float directionDelay_us, float enableDelay_us, float maxPulsePeriod_us)
     {
-        minPulseWidthHigh_ns_ = minPulseWidthHigh_ns;
-        minPulseWidthLow_ns_ = minPulseWidthLow_ns;
-        directionDelay_ns_ = directionDelay_ns;
-        enableDelay_ns_ = enableDelay_ns;
-        maxPulsePeriod_ns_ = maxPulsePeriod_ns;
+        minPulseWidthHigh_us_ = minPulseWidthHigh_us;
+        minPulseWidthLow_us_ = minPulseWidthLow_us;
+        directionDelay_us_ = directionDelay_us;
+        enableDelay_us_ = enableDelay_us;
+        maxPulsePeriod_us_ = maxPulsePeriod_us;
     }
 
-    uint32_t DriverInterface::getMinPulsePeriodNs() const
+    float DriverInterface::getMinPulsePeriodUs() const
     {
-        return minPulseWidthHigh_ns_ + minPulseWidthLow_ns_;
+        return minPulseWidthHigh_us_ + minPulseWidthLow_us_;
     }
 
-    uint32_t DriverInterface::getMaxPulsePeriodNs() const
+    float DriverInterface::getMaxPulsePeriodUs() const
     {
-        return maxPulsePeriod_ns_;
+        return maxPulsePeriod_us_;
     }
 
-    void DriverInterface::setPulsePeriodNs(uint32_t pulsePeriod_ns) {
-        pulsePeriod_ns_ = pulsePeriod_ns;
+    void DriverInterface::setPulsePeriodUs(float pulsePeriod_us) {
+        pulsePeriod_us_ = pulsePeriod_us;
     }
 
-    uint32_t DriverInterface::getPulsePeriod() const {
-        return pulsePeriod_ns_;
+    float DriverInterface::getPulsePeriodUs() const {
+        return pulsePeriod_us_;
     }
 
     void DriverInterface::setMicrosteps(uint8_t microsteps) {
@@ -229,7 +229,7 @@ namespace Stepper {
         return microsteps_;
     }
 
-    int64_t DriverInterface::getSteps() const {
+    uint64_t DriverInterface::getSteps() const {
         return numStepsDone_;
     }
 
@@ -237,7 +237,7 @@ namespace Stepper {
         numStepsDone_ = count;
     }
 
-    int64_t DriverInterface::getStepsMissed() const {
+    uint64_t DriverInterface::getStepsMissed() const {
         return numStepsMissed_;
     }
 

@@ -15,8 +15,8 @@ namespace Stepper {
 
     }
 
-    void DriverMCPWM::update(uint32_t stepsNew, uint32_t pulsePeriodNew) {
-        ESP_ERROR_CHECK(mcpwm_timer_set_period(stepTimerHandle_, timerTicksFromNs(pulsePeriodNew)));
+    void DriverMCPWM::update(uint32_t stepsNew, float pulsePeriodNew) {
+        ESP_ERROR_CHECK(mcpwm_timer_set_period(stepTimerHandle_, timerTicksFromUs(pulsePeriodNew)));
     }
 
     bool IRAM_ATTR DriverMCPWM::comperatorCallbackOnReach(mcpwm_cmpr_handle_t comparator, const mcpwm_compare_event_data_t* edata, void* user_ctx) {
@@ -52,7 +52,7 @@ namespace Stepper {
         stepTimerConfig.clk_src = MCPWM_TIMER_CLK_SRC_DEFAULT;
         stepTimerConfig.resolution_hz = timerResolutionHz_;
         stepTimerConfig.count_mode = MCPWM_TIMER_COUNT_MODE_UP_DOWN;
-        stepTimerConfig.period_ticks = timerTicksFromNs(maxPulsePeriod_ns_);
+        stepTimerConfig.period_ticks = timerTicksFromUs(maxPulsePeriod_us_);
         stepTimerConfig.intr_priority = 0;
         stepTimerConfig.flags.update_period_on_empty = 1;
         stepTimerConfig.flags.update_period_on_sync = 0;
@@ -92,7 +92,7 @@ namespace Stepper {
         mcpwm_comparator_event_callbacks_t comperatorCallbacks;
         comperatorCallbacks.on_reach = &DriverMCPWM::comperatorCallbackOnReach;
         ESP_ERROR_CHECK(mcpwm_comparator_register_event_callbacks(comparatorHandle_, &comperatorCallbacks, this));
-        ESP_ERROR_CHECK(mcpwm_comparator_set_compare_value(comparatorHandle_, timerTicksFromNs(minPulseWidthHigh_ns_)));
+        ESP_ERROR_CHECK(mcpwm_comparator_set_compare_value(comparatorHandle_, timerTicksFromUs(minPulseWidthHigh_us_)));
 
         mcpwm_generator_config_t generatorConfig;
         generatorConfig.gen_gpio_num = pinStep_.getPin();
@@ -113,12 +113,12 @@ namespace Stepper {
     }
 
     void DriverMCPWM::start() {
-        ESP_ERROR_CHECK(mcpwm_timer_set_period(stepTimerHandle_, timerTicksFromNs(pulsePeriod_ns_)));
+        ESP_ERROR_CHECK(mcpwm_timer_set_period(stepTimerHandle_, timerTicksFromUs(pulsePeriod_us_)));
         ESP_ERROR_CHECK(mcpwm_timer_start_stop(stepTimerHandle_, MCPWM_TIMER_START_NO_STOP));
     }
 
     void DriverMCPWM::startOnce() {
-        ESP_ERROR_CHECK(mcpwm_timer_set_period(stepTimerHandle_, timerTicksFromNs(pulsePeriod_ns_)));
+        ESP_ERROR_CHECK(mcpwm_timer_set_period(stepTimerHandle_, timerTicksFromUs(pulsePeriod_us_)));
         ESP_ERROR_CHECK(mcpwm_timer_start_stop(stepTimerHandle_, MCPWM_TIMER_START_STOP_FULL));
         ESP_ERROR_CHECK(mcpwm_timer_start_stop(stepTimerHandle_, MCPWM_TIMER_START_STOP_EMPTY));
     }
