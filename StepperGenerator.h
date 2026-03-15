@@ -63,9 +63,6 @@ namespace Stepper
             uint64_t stepsAcc   = 0; // steps in acceleration phase
             uint64_t stepsConst = 0; // steps in constant velocity phase
             uint64_t stepsDec   = 0; // steps in deceleration phase
-
-            uint32_t stepsCurrent = 0;
-            uint32_t stepsNextUpdate = 0;
         } state_;
 
         UQ20x12 computeStepPeriodUs(UQ20x12 velocity) const;
@@ -75,7 +72,7 @@ namespace Stepper
         static UQ20x12 computeDeltaV(UQ20x12 rate, uint32_t steps, UQ20x12 velocity);
         static uint64_t computeRampSteps(UQ20x12 dv, UQ20x12 rate);
 
-        static float callbackOnStepDone(uint32_t stepsNew, float pulsePeriod_us, void* user_ctx);
+        static uint32_t callbackOnStepDone(uint32_t stepsNew, float& pulsePeriod_us, void* user_ctx);
 
         DriverInterface& driver_;
 

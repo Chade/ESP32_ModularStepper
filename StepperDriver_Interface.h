@@ -9,7 +9,7 @@
 #include "StepperHelper.h"
 
 namespace Stepper {
-    using DriverCallback = std::function<float (uint32_t stepsNew, float pulsePeriod_us, void* user_ctx)>;
+    using DriverCallback = std::function<uint32_t (uint32_t stepsNew, float& pulsePeriod_us, void* user_ctx)>;
 
     class DriverInterface {
     public:
@@ -51,6 +51,7 @@ namespace Stepper {
         virtual void resetStepsMissed(uint64_t count = 0);
 
         void registerCallbackOnStepDone(DriverCallback callback, void* user_ctx);
+        void forceStepCallback();
 
     protected:
         static void task(void *args);
@@ -72,6 +73,10 @@ namespace Stepper {
         uint64_t numStepsDone_ {0};
         uint64_t numStepsMissed_ {0};
 
+        volatile uint32_t isrStepCount_ {0};
+        volatile uint32_t isrStepThreshold_ {1};
+        portMUX_TYPE stepCountMux_ = portMUX_INITIALIZER_UNLOCKED;
+
         struct NotificationData {
             uint32_t doStep : 29;
             uint8_t doDirectionChange : 1;
@@ -92,7 +97,7 @@ namespace Stepper {
         TaskHandle_t taskHandle_ {nullptr};
 
         void* callbackOnStepDoneUserCtx_ {nullptr};
-        DriverCallback callbackOnStepDone_ = [this](uint32_t, float, void*) -> float { return pulsePeriod_us_; };
+        DriverCallback callbackOnStepDone_ = [this](uint32_t, float& pulsePeriod_us, void*) -> uint32_t { return 1; };
     };
 }
 

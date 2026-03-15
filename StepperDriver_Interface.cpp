@@ -36,15 +36,11 @@ namespace Stepper {
     void IRAM_ATTR DriverInterface::task(void* args) {
         DriverInterface* self = static_cast<DriverInterface*>(args);
 
-        ESP_ERROR_CHECK(gpio_set_direction((gpio_num_t)13, GPIO_MODE_OUTPUT));
-        ESP_ERROR_CHECK(gpio_set_level((gpio_num_t)13, 0));
-
         for(;;) {
             Notification notification;
             if (xTaskNotifyWait(0UL, ~0UL, &notification.raw, portMAX_DELAY) != pdTRUE) {
                 continue; // Timeout or error
             }
-
 
             // Check if direction change is enqueued
             if (notification.data.doDirectionChange) {
@@ -59,19 +55,15 @@ namespace Stepper {
                 esp_rom_delay_us(delay_us); // busy wait, as this should not happen frequently, it should be ok
             }
 
-            // Check if step is enqueued
-            if (notification.data.doStep) {;
-                self->numStepsDone_ += notification.data.doStep;
-                self->numStepsMissed_ += notification.data.doStep - 1;
+            // Check if step batch is ready
+            if (notification.data.doStep) {
+                uint32_t steps = notification.data.doStep;
+                self->numStepsDone_ += steps;
 
                 // Execute callback
-                ESP_ERROR_CHECK(gpio_set_level((gpio_num_t)13, 1));
-                float newPulsePeriod_us = self->callbackOnStepDone_(notification.data.doStep, self->pulsePeriod_us_, self->callbackOnStepDoneUserCtx_);
-                ESP_ERROR_CHECK(gpio_set_level((gpio_num_t)13, 0));
-                self->setPulsePeriodUs(newPulsePeriod_us);
-                self->update(notification.data.doStep, newPulsePeriod_us);
+                self->isrStepThreshold_ = self->callbackOnStepDone_(steps, self->pulsePeriod_us_, self->callbackOnStepDoneUserCtx_);
+                self->update(steps, self->pulsePeriod_us_);
             }
-            taskYIELD();
         }
 
         vTaskDelete(self->taskHandle_);
@@ -93,7 +85,18 @@ namespace Stepper {
     bool DriverInterface::doStep() {
         if (taskHandle_ != nullptr)
         {
-            return xTaskNotify(taskHandle_, 0, eNotifyAction::eIncrement);
+            portENTER_CRITICAL(&stepCountMux_);
+            isrStepCount_++;
+            bool notify = (isrStepCount_ >= isrStepThreshold_);
+            portEXIT_CRITICAL(&stepCountMux_);
+
+            if (notify) {
+                uint32_t steps = isrStepCount_;
+                isrStepCount_ = 0;
+                isrStepThreshold_ = UINT32_MAX; // suppress notifications during callback
+                return xTaskNotify(taskHandle_, steps, eNotifyAction::eSetBits);
+            }
+            return true;
         }
         return false;
     }
@@ -101,9 +104,20 @@ namespace Stepper {
     bool IRAM_ATTR DriverInterface::doStepFromISR(BaseType_t* pxHigherPriorityTaskWoken) {
         if (taskHandle_ != nullptr)
         {
-            BaseType_t xHigherPriorityTaskWokenLocal = pdFALSE;
-            BaseType_t* pFlag = pxHigherPriorityTaskWoken ? pxHigherPriorityTaskWoken : &xHigherPriorityTaskWokenLocal;
-            return xTaskNotifyFromISR(taskHandle_, 0, eNotifyAction::eIncrement, pFlag);
+            portENTER_CRITICAL(&stepCountMux_);
+            isrStepCount_++;
+            bool notify = (isrStepCount_ >= isrStepThreshold_);
+            portEXIT_CRITICAL(&stepCountMux_);
+
+            if (notify) {
+                uint32_t steps = isrStepCount_;
+                isrStepCount_ = 0;
+                isrStepThreshold_ = UINT32_MAX; // suppress notifications during callback
+                BaseType_t xHigherPriorityTaskWokenLocal = pdFALSE;
+                BaseType_t* pFlag = pxHigherPriorityTaskWoken ? pxHigherPriorityTaskWoken : &xHigherPriorityTaskWokenLocal;
+                return xTaskNotifyFromISR(taskHandle_, steps, eNotifyAction::eSetBits, pFlag);
+            }
+            return true;
         }
         return false;
     }
@@ -248,5 +262,9 @@ namespace Stepper {
     void DriverInterface::registerCallbackOnStepDone(DriverCallback callback, void* user_ctx) {
         callbackOnStepDoneUserCtx_ = user_ctx;
         callbackOnStepDone_ = std::move(callback);
+    }
+
+    void DriverInterface::forceStepCallback() {
+        isrStepThreshold_ = 1; // next ISR step will trigger a callback
     }
 }

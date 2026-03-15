@@ -15,8 +15,8 @@ namespace Stepper {
 
     }
 
-    void DriverMCPWM::update(uint32_t stepsNew, float pulsePeriodNew) {
-        ESP_ERROR_CHECK(mcpwm_timer_set_period(stepTimerHandle_, timerTicksFromUs(pulsePeriodNew)));
+    void DriverMCPWM::update(uint32_t stepsNew, float pulsePeriodNew_us) {
+        ESP_ERROR_CHECK(mcpwm_timer_set_period(stepTimerHandle_, timerTicksFromUs(pulsePeriodNew_us)));
     }
 
     bool IRAM_ATTR DriverMCPWM::comperatorCallbackOnReach(mcpwm_cmpr_handle_t comparator, const mcpwm_compare_event_data_t* edata, void* user_ctx) {
@@ -29,20 +29,17 @@ namespace Stepper {
 
     bool IRAM_ATTR DriverMCPWM::stepTimerCallbackOnFull(mcpwm_timer_handle_t timer, const mcpwm_timer_event_data_t* edata, void* user_ctx) {
         DriverMCPWM* self = static_cast<DriverMCPWM*>(user_ctx);
-        self->onStepFull += 1;
         return false;
     }
 
     bool IRAM_ATTR DriverMCPWM::stepTimerCallbackOnEmpty(mcpwm_timer_handle_t timer, const mcpwm_timer_event_data_t* edata, void* user_ctx) {
         DriverMCPWM* self = static_cast<DriverMCPWM*>(user_ctx);
-        self->onStepEmpty += 1;
         return false;
     }
 
     bool IRAM_ATTR DriverMCPWM::stepTimerCallbackOnStop(mcpwm_timer_handle_t timer, const mcpwm_timer_event_data_t* edata, void* user_ctx) {
         DriverMCPWM* self = static_cast<DriverMCPWM*>(user_ctx);
         mcpwm_generator_set_force_level(self->generatorHandle_, self->pinStep_.getLevelDisable(), false);
-        self->onStepStop += 1;
         return false;
     }
 
@@ -61,8 +58,8 @@ namespace Stepper {
         ESP_ERROR_CHECK(mcpwm_new_timer(&stepTimerConfig, &stepTimerHandle_));
 
         mcpwm_timer_event_callbacks_t stepTimerCallbacks;
-        stepTimerCallbacks.on_full = DriverMCPWM::stepTimerCallbackOnFull;
-        stepTimerCallbacks.on_empty = DriverMCPWM::stepTimerCallbackOnEmpty;
+        //stepTimerCallbacks.on_full = DriverMCPWM::stepTimerCallbackOnFull;
+        //stepTimerCallbacks.on_empty = DriverMCPWM::stepTimerCallbackOnEmpty;
         stepTimerCallbacks.on_stop = DriverMCPWM::stepTimerCallbackOnStop;
 
         ESP_ERROR_CHECK(mcpwm_timer_register_event_callbacks(stepTimerHandle_, &stepTimerCallbacks, this));
@@ -113,6 +110,8 @@ namespace Stepper {
     }
 
     void DriverMCPWM::start() {
+        isrStepCount_ = 0;
+        isrStepThreshold_ = 1; // first step triggers callback to get initial batch size
         ESP_ERROR_CHECK(mcpwm_timer_set_period(stepTimerHandle_, timerTicksFromUs(pulsePeriod_us_)));
         ESP_ERROR_CHECK(mcpwm_timer_start_stop(stepTimerHandle_, MCPWM_TIMER_START_NO_STOP));
     }

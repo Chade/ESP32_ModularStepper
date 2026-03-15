@@ -4,43 +4,6 @@
 
 namespace Stepper {
 
-    // ---- 64-bit safe fixed-point arithmetic helpers ----
-    //
-    // UQ20x12 uses a 32-bit internal representation (20 integer + 12 fraction bits).
-    // At high velocities (200k steps/s) and accelerations (~10k steps/s²),
-    // naive fixed-point operations cause:
-    //   1) Overflow: dv * dv can reach 4e10, far exceeding UQ20x12 max (~1M)
-    //   2) Precision loss: dt = steps/velocity can be <1 LSB (1/4096) and truncate to 0
-    //
-    // These helpers use 64-bit intermediates to avoid both problems.
-
-    /// Compute dv = rate * steps / velocity using 64-bit intermediates.
-    /// Avoids the precision loss from computing the tiny dt = steps/velocity first.
-    /// Mathematically: dv = rate * steps / velocity
-    /// In raw representation: dv_raw = rate_raw * steps * Scale / velocity_raw
-    UQ20x12 Generator::computeDeltaV(UQ20x12 rate, uint32_t steps, UQ20x12 velocity) {
-        constexpr uint64_t scale = UQ20x12::Scale; // 2^12 = 4096
-        uint64_t vel_raw = static_cast<uint64_t>(velocity.getInternal());
-        if (vel_raw == 0) return UQ20x12::MaxValue;
-        uint64_t num = static_cast<uint64_t>(rate.getInternal()) * static_cast<uint64_t>(steps);
-        uint64_t result_raw = (num * scale) / vel_raw;
-        // Clamp to UQ20x12 range to prevent overflow on conversion back to 32-bit
-        constexpr uint64_t maxRaw = static_cast<uint64_t>(UQ20x12::MaxValue.getInternal());
-        return UQ20x12::fromInternal(static_cast<uint32_t>(result_raw > maxRaw ? maxRaw : result_raw));
-    }
-
-    /// Compute s = dv² / (2 * rate) as integer step count using 64-bit intermediates.
-    /// Avoids overflow from squaring large velocity deltas in 32-bit fixed-point.
-    /// Max safe dv: ~4.3 billion raw (full UQ20x12 range), since dv_raw² < 2^64.
-    uint64_t Generator::computeRampSteps(UQ20x12 dv, UQ20x12 rate) {
-        constexpr uint64_t scale = UQ20x12::Scale; // 2^12 = 4096
-        uint64_t dv_raw   = static_cast<uint64_t>(dv.getInternal());
-        uint64_t rate_raw = static_cast<uint64_t>(rate.getInternal());
-        if (rate_raw == 0) return 0;
-        // s = dv² / (2*a) = dv_raw² / (2 * Scale * a_raw)
-        return (dv_raw * dv_raw) / (2 * scale * rate_raw);
-    }
-
     Generator::Generator(DriverInterface& driver) : driver_(driver) {
         esp_log_level_set(log_tag, ESP_LOG_INFO);
         driver_.registerCallbackOnStepDone(callbackOnStepDone, this);
@@ -61,15 +24,8 @@ namespace Stepper {
             // Calc first step period
             UQ20x12 stepPeriod_us = computeStepPeriodUs(state_.currentVelocity);
             if (stepPeriod_us > 0) {
-                // Compute number of steps to reach next velocity level
-                if (state_.state == State::Accelerating) {
-                    state_.stepsNextUpdate = static_cast<uint32_t>(state_.currentVelocity / state_.acceleration);
-                }
-                else if (state_.state == State::Decelerating) {
-                    state_.stepsNextUpdate = static_cast<uint32_t>(state_.currentVelocity / state_.deceleration);
-                }
                 driver_.setPulsePeriodUs(static_cast<float>(stepPeriod_us));
-                driver_.start();
+                driver_.start(); // resets batch counters, first step triggers callback
                 return true;
             }
             else {
@@ -78,6 +34,8 @@ namespace Stepper {
                 return false;
             }
         }
+        // Already running — parameters updated, force recalculation on next step
+        driver_.forceStepCallback();
         return true;
     }
 
@@ -110,11 +68,58 @@ namespace Stepper {
         return run(task);
     }
 
+    // ---- 64-bit safe fixed-point arithmetic helpers ----
+    //
+    // UQ20x12 uses a 32-bit internal representation (20 integer + 12 fraction bits).
+    // At high velocities (200k steps/s) and accelerations (~10k steps/s²),
+    // naive fixed-point operations cause:
+    //   1) Overflow: dv * dv can reach 4e10, far exceeding UQ20x12 max (~1M)
+    //   2) Precision loss: dt = steps/velocity can be <1 LSB (1/4096) and truncate to 0
+    //
+    // These helpers use 64-bit intermediates to avoid both problems.
+
+    /// Compute dv = rate * steps / velocity using 64-bit intermediates.
+    /// Avoids the precision loss from computing the tiny dt = steps/velocity first.
+    /// Mathematically: dv = rate * steps / velocity
+    /// In raw representation: dv_raw = rate_raw * steps * Scale / velocity_raw
+    UQ20x12 Generator::computeDeltaV(UQ20x12 rate, uint32_t steps, UQ20x12 velocity) {
+        constexpr uint64_t scale = UQ20x12::Scale; // 2^12 = 4096
+        uint64_t vel_raw = static_cast<uint64_t>(velocity.getInternal());
+        
+        if (vel_raw == 0) {
+            return UQ20x12::MaxValue;
+        }
+
+        uint64_t num = static_cast<uint64_t>(rate.getInternal()) * static_cast<uint64_t>(steps);
+        uint64_t result_raw = (num * scale) / vel_raw;
+
+        // Clamp to UQ20x12 range to prevent overflow on conversion back to 32-bit
+        constexpr uint64_t maxRaw = static_cast<uint64_t>(UQ20x12::MaxValue.getInternal());
+        return UQ20x12::fromInternal(static_cast<uint32_t>(result_raw > maxRaw ? maxRaw : result_raw));
+    }
+
+    /// Compute s = dv² / (2 * rate) as integer step count using 64-bit intermediates.
+    /// Avoids overflow from squaring large velocity deltas in 32-bit fixed-point.
+    /// Max safe dv: ~4.3 billion raw (full UQ20x12 range), since dv_raw² < 2^64.
+    uint64_t Generator::computeRampSteps(UQ20x12 dv, UQ20x12 rate) {
+        constexpr uint64_t scale = UQ20x12::Scale; // 2^12 = 4096
+        uint64_t dv_raw   = static_cast<uint64_t>(dv.getInternal());
+        uint64_t rate_raw = static_cast<uint64_t>(rate.getInternal());
+
+        if (rate_raw == 0) {
+            return 0;
+        }
+
+        // s = dv² / (2*a) = dv_raw² / (2 * Scale * a_raw)
+        return (dv_raw * dv_raw) / (2 * scale * rate_raw);
+    }
+
     UQ20x12 Generator::computeStepPeriodUs(UQ20x12 velocity) const {
         // Compute period from velocity
         if (velocity == 0.0) {
             return 0.0; // default 0 us when stopped
         }
+
         // period = 1e6 / v (microseconds per step)
         UQ20x12 period_us = UQ20x12(1'000'000) / velocity;
 
@@ -327,54 +332,55 @@ namespace Stepper {
         state_.stepsAcc   = 0; // steps in acceleration phase
         state_.stepsConst = 0; // steps in constant velocity phase
         state_.stepsDec   = 0; // steps in deceleration phase
-
-        state_.stepsCurrent = 0;
-        state_.stepsNextUpdate = 0;
     }
 
     float Generator::getVelocity() const {
         return static_cast<float>(state_.currentVelocity);
     }
 
-    float Generator::callbackOnStepDone(uint32_t stepsNew, float pulsePeriod_us, void* user_ctx) {
+    uint32_t Generator::callbackOnStepDone(uint32_t stepsNew, float& pulsePeriod_us, void* user_ctx) {
         Generator* self = static_cast<Generator*>(user_ctx);
-        
-        // Preserve steps for next cycle
-        self->state_.stepsCurrent += stepsNew;
 
-        if ((self->state_.stepsCurrent >= self->state_.stepsNextUpdate) && self->state_.state != State::Running) {
-
-            // Propagate internal states for next period
-            if (self->advanceStateAfterStep(self->state_.stepsCurrent, self->state_)) {
-                // Check if direction change is pending
-                if (self->state_.doDirectionChange) {
-                    self->state_.currentDirection = self->driver_.changeDirection();
-                    self->state_.doDirectionChange = false;
-                }
-
-                // Compute number of steps to reach next velocity level
-                if (self->state_.state == State::Accelerating) {
-                    self->state_.stepsNextUpdate = static_cast<uint32_t>(self->state_.currentVelocity / self->state_.acceleration);
-                }
-                else if (self->state_.state == State::Decelerating) {
-                    self->state_.stepsNextUpdate = static_cast<uint32_t>(self->state_.currentVelocity / self->state_.deceleration);
-                }
-                else {
-                    self->state_.stepsNextUpdate = static_cast<uint32_t>(self->state_.stepsConst);
-                }
-
-                // Reset step counter
-                self->state_.stepsCurrent = 0;
-
-                // Compute and return next step period
-                return static_cast<float>(self->computeStepPeriodUs(self->state_.currentVelocity));
+        // The driver only calls us when the batch threshold is reached.
+        // Always recalculate velocity for the accumulated step batch.
+        if (self->advanceStateAfterStep(stepsNew, self->state_)) {
+            // Check if direction change is pending
+            if (self->state_.doDirectionChange) {
+                self->state_.currentDirection = self->driver_.changeDirection();
+                self->state_.doDirectionChange = false;
             }
-            else {
-                self->driver_.stop();
-                return 0;
+
+            // Compute batch size for next callback.
+            // During acc/dec: batch = v/a steps (one velocity quantum).
+            // During const:   batch = remaining constant-phase steps (step mode)
+            //                        or a large value (velocity mode).
+            uint32_t nextBatch = 1;
+            if (self->state_.state == State::Accelerating) {
+                nextBatch = static_cast<uint32_t>(self->state_.currentVelocity / self->state_.acceleration);
             }
+            else if (self->state_.state == State::Decelerating) {
+                nextBatch = static_cast<uint32_t>(self->state_.currentVelocity / self->state_.deceleration);
+            }
+            else if (self->state_.state == State::Running) {
+                if (self->state_.stepsTotal > 0) {
+                    // Step mode: next batch covers remaining constant-velocity steps
+                    uint64_t constEnd = self->state_.stepsAcc + self->state_.stepsConst;
+                    uint64_t remaining = (self->state_.stepsDone < constEnd) ? (constEnd - self->state_.stepsDone) : 1;
+                    return static_cast<uint32_t>((remaining > UINT32_MAX) ? UINT32_MAX : remaining);
+                } else {
+                    // Velocity mode: no ramp needed, check infrequently
+                    // (forceStepCallback() will override if user calls run() again)
+                    return static_cast<uint32_t>((self->state_.currentVelocity + 999) / 1000);
+                }
+            }
+
+            pulsePeriod_us = static_cast<float>(self->computeStepPeriodUs(self->state_.currentVelocity));
+            return nextBatch;
         }
-        return pulsePeriod_us;
+        else {
+            self->driver_.stop();
+            return 0;
+        }
     }
 
 
