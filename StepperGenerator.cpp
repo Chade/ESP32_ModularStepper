@@ -4,7 +4,7 @@
 
 namespace Stepper {
 
-    Generator::Generator(DriverInterface& driver) : driver_(driver) {
+    Generator::Generator(DriverBase& driver) : driver_(driver) {
         esp_log_level_set(log_tag, ESP_LOG_INFO);
         driver_.registerCallbackOnStepDone(callbackOnStepDone, this);
         driver_.init();
@@ -78,11 +78,11 @@ namespace Stepper {
     //
     // These helpers use 64-bit intermediates to avoid both problems.
 
-    /// Compute dv = rate * steps / velocity using 64-bit intermediates.
+    /// Compute dv = acceleration * steps / velocity using 64-bit intermediates.
     /// Avoids the precision loss from computing the tiny dt = steps/velocity first.
-    /// Mathematically: dv = rate * steps / velocity
-    /// In raw representation: dv_raw = rate_raw * steps * Scale / velocity_raw
-    UQ20x12 Generator::computeDeltaV(UQ20x12 rate, uint32_t steps, UQ20x12 velocity) {
+    /// Mathematically: dv = acceleration * steps / velocity
+    /// In raw representation: dv_raw = acceleration_raw * steps * Scale / velocity_raw
+    UQ20x12 Generator::computeDeltaV(UQ20x12 acceleration, uint32_t steps, UQ20x12 velocity) {
         constexpr uint64_t scale = UQ20x12::Scale; // 2^12 = 4096
         uint64_t vel_raw = static_cast<uint64_t>(velocity.getInternal());
         
@@ -90,7 +90,7 @@ namespace Stepper {
             return UQ20x12::MaxValue;
         }
 
-        uint64_t num = static_cast<uint64_t>(rate.getInternal()) * static_cast<uint64_t>(steps);
+        uint64_t num = static_cast<uint64_t>(acceleration.getInternal()) * static_cast<uint64_t>(steps);
         uint64_t result_raw = (num * scale) / vel_raw;
 
         // Clamp to UQ20x12 range to prevent overflow on conversion back to 32-bit
@@ -98,20 +98,20 @@ namespace Stepper {
         return UQ20x12::fromInternal(static_cast<uint32_t>(result_raw > maxRaw ? maxRaw : result_raw));
     }
 
-    /// Compute s = dv² / (2 * rate) as integer step count using 64-bit intermediates.
+    /// Compute s = dv² / (2 * acceleration) as integer step count using 64-bit intermediates.
     /// Avoids overflow from squaring large velocity deltas in 32-bit fixed-point.
     /// Max safe dv: ~4.3 billion raw (full UQ20x12 range), since dv_raw² < 2^64.
-    uint64_t Generator::computeRampSteps(UQ20x12 dv, UQ20x12 rate) {
+    uint64_t Generator::computeRampSteps(UQ20x12 dv, UQ20x12 acceleration) {
         constexpr uint64_t scale = UQ20x12::Scale; // 2^12 = 4096
         uint64_t dv_raw   = static_cast<uint64_t>(dv.getInternal());
-        uint64_t rate_raw = static_cast<uint64_t>(rate.getInternal());
+        uint64_t acceleration_raw = static_cast<uint64_t>(acceleration.getInternal());
 
-        if (rate_raw == 0) {
+        if (acceleration_raw == 0) {
             return 0;
         }
 
         // s = dv² / (2*a) = dv_raw² / (2 * Scale * a_raw)
-        return (dv_raw * dv_raw) / (2 * scale * rate_raw);
+        return (dv_raw * dv_raw) / (2 * scale * acceleration_raw);
     }
 
     UQ20x12 Generator::computeStepPeriodUs(UQ20x12 velocity) const {
@@ -336,6 +336,14 @@ namespace Stepper {
 
     float Generator::getVelocity() const {
         return static_cast<float>(state_.currentVelocity);
+    }
+
+    uint64_t Generator::getStepsDone() const {
+        return state_.stepsDone;
+    }
+
+    DriverBase& Generator::getDriver() {
+        return driver_;
     }
 
     uint32_t Generator::callbackOnStepDone(uint32_t stepsNew, float& pulsePeriod_us, void* user_ctx) {

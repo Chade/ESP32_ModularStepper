@@ -6,9 +6,15 @@
 #include "StepperLog.h"
 
 namespace Stepper {
-    DriverMCPWM::DriverMCPWM(int8_t enablePin, int8_t stepPin, int8_t directionPin)
-            : DriverInterface(enablePin, stepPin, directionPin) {
+    DriverMCPWM::DriverMCPWM(int8_t enablePin, int8_t stepPin, int8_t directionPin, uint8_t microsteps)
+            : DriverBase(enablePin, stepPin, directionPin, microsteps),
+              timerScaleShift_((microsteps != 0) ? 32 - __builtin_clz(microsteps) : 0),
+              timerResolutionHz_(timerBaseResolution_ << timerScaleShift_) {
         esp_log_level_set(log_tag, ESP_LOG_INFO);
+
+        // Calc the max pulse period based on the timer resolution and max value of the timer counter (16 bit)
+        // As we count up and down, the max number of ticks within a period is 65535 * 2 = 131070
+        maxPulsePeriod_us_ = timerTicksToUs(UINT16_MAX * 2);
     }
 
     DriverMCPWM::~DriverMCPWM() {
@@ -58,8 +64,8 @@ namespace Stepper {
         ESP_ERROR_CHECK(mcpwm_new_timer(&stepTimerConfig, &stepTimerHandle_));
 
         mcpwm_timer_event_callbacks_t stepTimerCallbacks;
-        //stepTimerCallbacks.on_full = DriverMCPWM::stepTimerCallbackOnFull;
-        //stepTimerCallbacks.on_empty = DriverMCPWM::stepTimerCallbackOnEmpty;
+        stepTimerCallbacks.on_full = NULL;
+        stepTimerCallbacks.on_empty = NULL;
         stepTimerCallbacks.on_stop = DriverMCPWM::stepTimerCallbackOnStop;
 
         ESP_ERROR_CHECK(mcpwm_timer_register_event_callbacks(stepTimerHandle_, &stepTimerCallbacks, this));

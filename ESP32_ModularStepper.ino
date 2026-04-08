@@ -63,7 +63,7 @@ void setup() {
 }
 
 void loop() {
-  Serial.printf("CurrentVelocity: %f\n", generator.getVelocity());
-  Serial.printf("Steps: %lu\n", static_cast<uint32_t>(driver.getSteps()));
+  //Serial.printf("CurrentVelocity: %f\n", generator.getVelocity());
+  //Serial.printf("Steps: %lu\n", static_cast<uint32_t>(driver.getSteps()));
   vTaskDelay(pdMS_TO_TICKS(5000));
 }

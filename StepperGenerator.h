@@ -1,7 +1,7 @@
 #ifndef STEPPER_GENERATOR_H
 #define STEPPER_GENERATOR_H
 
-#include "StepperDriver_Interface.h"
+#include "StepperDriver_Base.h"
 #include <stdint.h>
 #include <FixedPoints.h>
 #include <FixedPointsCommon.h>
@@ -15,8 +15,8 @@ namespace Stepper
     {
     public:
         Generator() = delete;
-        Generator(DriverInterface& driver);
-        ~Generator();
+        Generator(DriverBase& driver);
+        virtual ~Generator();
 
         struct GeneratorTask {
             uint32_t steps = 0;
@@ -40,6 +40,9 @@ namespace Stepper
         void resetState();
 
         float getVelocity() const;
+        uint64_t getStepsDone() const;
+
+        DriverBase& getDriver();
 
     private:
 
@@ -69,12 +72,12 @@ namespace Stepper
         bool initializeStateBeforeStep(const GeneratorTask&, GeneratorState& state);
         bool advanceStateAfterStep(uint32_t steps, GeneratorState& state);
 
-        static UQ20x12 computeDeltaV(UQ20x12 rate, uint32_t steps, UQ20x12 velocity);
-        static uint64_t computeRampSteps(UQ20x12 dv, UQ20x12 rate);
+        static UQ20x12 computeDeltaV(UQ20x12 acceleration, uint32_t steps, UQ20x12 velocity);
+        static uint64_t computeRampSteps(UQ20x12 dv, UQ20x12 acceleration);
 
         static uint32_t callbackOnStepDone(uint32_t stepsNew, float& pulsePeriod_us, void* user_ctx);
 
-        DriverInterface& driver_;
+        DriverBase& driver_;
 
         static constexpr UQ20x12 minVelocity_ {1.0};  // steps/s
         static constexpr const char* log_tag {"Generator"};
