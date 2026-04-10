@@ -1,10 +1,12 @@
 #ifndef STEPPER_GENERATOR_H
 #define STEPPER_GENERATOR_H
 
-#include "StepperDriver.h"
-#include <driver/gptimer.h>
-#include <esp_timer.h>
+#include "StepperDriver_Base.h"
 #include <stdint.h>
+#include <FixedPoints.h>
+#include <FixedPointsCommon.h>
+
+using UQ20x12 = UFixed<20, 12>;
 
 namespace Stepper
 {
@@ -13,53 +15,50 @@ namespace Stepper
     {
     public:
         Generator() = delete;
-        Generator(Driver& driver);
-        ~Generator();
+        Generator(DriverBase& driver);
+        virtual ~Generator();
 
         struct GeneratorTask {
-            uint64_t steps = 0;
-            float velocity = 0.0f;
-            float acceleration = 0.0f;
-            float deceleration = 0.0f;
-            Direction direction = Direction::NEUTRAL;
+            uint32_t steps = 0;
+            UQ20x12 velocity = 0.0;
+            UQ20x12 acceleration = 0.0;
+            UQ20x12 deceleration = 0.0;
+            Direction direction = Direction::Neutral;
         };
 
-        bool run(const GeneratorTask& task, uint32_t waitFor_ms = portMAX_DELAY);
+        bool run(const GeneratorTask& task);
 
         // Velocity mode: Ramp to target velocity (steps/s) using given accel/decel (steps/s^2).
         // Call again with targetVelocity = 0 to decelerate to stop.
-        bool run(float targetVelocity, float acceleration, float deceleration, Direction direction, uint32_t waitFor_ms = portMAX_DELAY);
+        bool run(float targetVelocity, float acceleration, float deceleration, Direction direction);
 
         // Steps mode: Perform 'steps' at up to targetVelocity with accel/decel ramp (steps/s^2).
         // Returns immediately; generator schedules steps until done.
-        bool run(uint64_t steps, float targetVelocity, float acceleration, float deceleration, Direction direction, uint32_t waitFor_ms = portMAX_DELAY);
-
-        void start();
-        void stop();
+        bool run(uint64_t steps, float targetVelocity, float acceleration, float deceleration, Direction direction);
 
         State getState() const;
         void resetState();
 
+        float getVelocity() const;
+        uint64_t getStepsDone() const;
+
+        DriverBase& getDriver();
+
     private:
-        enum class TimerType
-        {
-            Software,
-            Hardware
-        };
 
         struct GeneratorState {
-            State state = State::UNDEFINED; // movement state
+            State state = State::Undefined; // movement state
 
-            Direction currentDirection = Direction::NEUTRAL; // current direction
-            Direction targetDirection  = Direction::NEUTRAL; // target direction
+            Direction currentDirection = Direction::Neutral; // current direction
+            Direction targetDirection  = Direction::Neutral; // target direction
 
             bool doDirectionChange = false; // request direction change
 
             // Kinematic state
-            float currentVelocity = 0.0f; // steps/s
-            float targetVelocity  = 0.0f; // steps/s
-            float acceleration    = 0.0f; // steps/s^2
-            float deceleration    = 0.0f; // steps/s^2
+            UQ20x12 currentVelocity = 0.0; // steps/s
+            UQ20x12 targetVelocity  = 0.0; // steps/s
+            UQ20x12 acceleration    = 0.0; // steps/s^2
+            UQ20x12 deceleration    = 0.0; // steps/s^2
 
             // Distance mode state
             uint64_t stepsTotal = 0; // total steps requested
@@ -67,37 +66,21 @@ namespace Stepper
             uint64_t stepsAcc   = 0; // steps in acceleration phase
             uint64_t stepsConst = 0; // steps in constant velocity phase
             uint64_t stepsDec   = 0; // steps in deceleration phase
-        } m_state;
+        } state_;
 
-        struct StepperTask {
-            uint64_t period_us = 0;
-        };
-
-        void createTimer(TimerType type);
-        void stopTimer();
-        void deleteTimer();
-        void rearmTimer(uint64_t period_us);
-        static void timerCallback(void *arg);
-        static bool gptimerOnAlarm(gptimer_handle_t timer, const gptimer_alarm_event_data_t *edata, void *user_ctx);
-        static void generatorTask(void *args);
-
-        void scheduleNextStep(uint64_t period_us);
-        uint64_t computeStepPeriodUs(float velocity) const;
+        UQ20x12 computeStepPeriodUs(UQ20x12 velocity) const;
         bool initializeStateBeforeStep(const GeneratorTask&, GeneratorState& state);
-        bool advanceStateAfterStep(GeneratorState& state, float minVelocity = 10.0f);
+        bool advanceStateAfterStep(uint32_t steps, GeneratorState& state);
 
-        Driver& m_driver;
-        esp_timer_handle_t m_timer = nullptr;
-        gptimer_handle_t m_gptimer = nullptr;
+        static UQ20x12 computeDeltaV(UQ20x12 acceleration, uint32_t steps, UQ20x12 velocity);
+        static uint64_t computeRampSteps(UQ20x12 dv, UQ20x12 acceleration);
 
-        TaskHandle_t m_taskHandle = nullptr;
-        QueueHandle_t m_taskQueueHandle = nullptr;
-        QueueHandle_t m_stepQueueHandle = nullptr;
- 
-        static constexpr uint32_t k_timerResolutionHz = 1000000; // 1 MHz resolution (1 tick = 1 us)
-        static constexpr uint32_t k_taskQueueSize = 10;
-        static constexpr float k_minVelocity = 1.0f;  // steps/s
-        static constexpr const char* log_tag = "Generator";
+        static uint32_t callbackOnStepDone(uint32_t stepsNew, float& pulsePeriod_us, void* user_ctx);
+
+        DriverBase& driver_;
+
+        static constexpr UQ20x12 minVelocity_ {1.0};  // steps/s
+        static constexpr const char* log_tag {"Generator"};
     };
 } // namespace Stepper
 
