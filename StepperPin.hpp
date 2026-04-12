@@ -1,5 +1,5 @@
-#ifndef STEPPER_PIN_H
-#define STEPPER_PIN_H
+#ifndef STEPPER_PIN_HPP
+#define STEPPER_PIN_HPP
 
 #include <driver/gpio.h>
 
@@ -104,4 +104,4 @@ namespace Stepper {
 
 
 
-#endif // STEPPER_PIN_H
+#endif // STEPPER_PIN_HPP

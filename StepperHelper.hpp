@@ -29,9 +29,10 @@ namespace Stepper
     enum class State : uint8_t
     {
         Undefined = 0,
-        Running = 1,
-        Accelerating = 3,
-        Decelerating = 5,
+        Manual = 1,
+        Running = 2,
+        Accelerating = 6,
+        Decelerating = 10,
         Paused = 16,
         Stopped = 32,
         Inhibited = 96,

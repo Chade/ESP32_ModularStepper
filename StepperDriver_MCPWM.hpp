@@ -1,9 +1,9 @@
-#include "driver/mcpwm_types.h"
-#ifndef STEPPER_DRIVER_MCPWM_H
-#define STEPPER_DRIVER_MCPWM_H
+#ifndef STEPPER_DRIVER_MCPWM_HPP
+#define STEPPER_DRIVER_MCPWM_HPP
 
+#include "driver/mcpwm_types.h"
 #include <driver/mcpwm_prelude.h>
-#include "StepperDriver_Base.h"
+#include "StepperDriver_Base.hpp"
 
 
 namespace Stepper
@@ -59,4 +59,4 @@ namespace Stepper
     };
 }
 
-#endif //STEPPER_DRIVER_MCPWM_H
+#endif //STEPPER_DRIVER_MCPWM_HPP

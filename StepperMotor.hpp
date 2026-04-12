@@ -1,7 +1,7 @@
-#ifndef STEPPER_MOTOR_H
-#define STEPPER_MOTOR_H
+#ifndef STEPPER_MOTOR_HPP
+#define STEPPER_MOTOR_HPP
 
-#include "StepperGenerator.h"
+#include "StepperGenerator.hpp"
 
 namespace Stepper {
     class Motor {
@@ -28,14 +28,11 @@ namespace Stepper {
         float getAngle() const;
         State getState() const;
 
-        Generator& getGenerator();
-
-    private:
-        float angleToSteps(float angle_deg) const {
+        float angleDegToSteps(float angle_deg) const {
             return (angle_deg / 360.0f) * stepsPerRevolution_ * gearRatio_;
         };
 
-        float stepsToAngle(float steps) const {
+        float stepsToAngleDeg(float steps) const {
             return (steps / (stepsPerRevolution_ * gearRatio_)) * 360.0f;
         };
 
@@ -47,6 +44,10 @@ namespace Stepper {
             return (steps / (stepsPerRevolution_ * gearRatio_));
         };
 
+        Generator& getGenerator();
+        const Generator& getGenerator() const;
+
+    private:
         Generator& generator_;
         State state_ = State::Undefined;
         uint32_t stepsPerRevolution_ = 200;
@@ -54,4 +55,4 @@ namespace Stepper {
     };
 }
 
-#endif // STEPPER_MOTOR_H
+#endif // STEPPER_MOTOR_HPP

@@ -1,5 +1,5 @@
-#include "StepperGenerator.h"
-#include "StepperLog.h"
+#include "StepperGenerator.hpp"
+#include "StepperLog.hpp"
 
 
 namespace Stepper {
@@ -343,6 +343,10 @@ namespace Stepper {
     }
 
     DriverBase& Generator::getDriver() {
+        return driver_;
+    }
+
+    const DriverBase& Generator::getDriver() const {
         return driver_;
     }
 

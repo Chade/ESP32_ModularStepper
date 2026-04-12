@@ -1,6 +1,6 @@
 #include "esp32-hal-gpio.h"
-#include "StepperDriver_Base.h"
 #include "esp_task_wdt.h"
+#include "StepperDriver_Base.hpp"
 
 namespace Stepper {
     DriverBase::DriverBase(int8_t enablePin, int8_t stepPin, int8_t directionPin, uint8_t microsteps)
@@ -82,7 +82,7 @@ namespace Stepper {
         return pinEnable_.isEnabled();
     }
 
-    bool DriverBase::doStep() {
+    bool DriverBase::doStep(bool immidiately) {
         if (taskHandle_ != nullptr)
         {
             portENTER_CRITICAL(&stepCountMux_);
@@ -90,10 +90,12 @@ namespace Stepper {
             bool notify = (isrStepCount_ >= isrStepThreshold_);
             portEXIT_CRITICAL(&stepCountMux_);
 
-            if (notify) {
+            if (notify || immidiately) {
+                portENTER_CRITICAL(&stepCountMux_);
                 uint32_t steps = isrStepCount_;
                 isrStepCount_ = 0;
                 isrStepThreshold_ = UINT32_MAX; // suppress notifications during callback
+                portEXIT_CRITICAL(&stepCountMux_);
                 return xTaskNotify(taskHandle_, steps, eNotifyAction::eSetBits);
             }
             return true;
@@ -101,7 +103,7 @@ namespace Stepper {
         return false;
     }
 
-    bool IRAM_ATTR DriverBase::doStepFromISR(BaseType_t* pxHigherPriorityTaskWoken) {
+    bool IRAM_ATTR DriverBase::doStepFromISR(BaseType_t* pxHigherPriorityTaskWoken, bool immidiately) {
         if (taskHandle_ != nullptr)
         {
             portENTER_CRITICAL(&stepCountMux_);
@@ -109,10 +111,12 @@ namespace Stepper {
             bool notify = (isrStepCount_ >= isrStepThreshold_);
             portEXIT_CRITICAL(&stepCountMux_);
 
-            if (notify) {
+            if (notify || immidiately) {
+                portENTER_CRITICAL(&stepCountMux_);
                 uint32_t steps = isrStepCount_;
                 isrStepCount_ = 0;
                 isrStepThreshold_ = UINT32_MAX; // suppress notifications during callback
+                portEXIT_CRITICAL(&stepCountMux_);
                 BaseType_t xHigherPriorityTaskWokenLocal = pdFALSE;
                 BaseType_t* pFlag = pxHigherPriorityTaskWoken ? pxHigherPriorityTaskWoken : &xHigherPriorityTaskWokenLocal;
                 return xTaskNotifyFromISR(taskHandle_, steps, eNotifyAction::eSetBits, pFlag);

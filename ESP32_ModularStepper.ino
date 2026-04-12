@@ -1,6 +1,8 @@
-#include "StepperLog.h"
-#include "StepperDriver_MCPWM.h"
-#include "StepperGenerator.h"
+#include "StepperLog.hpp"
+#include "StepperDriver_MCPWM.hpp"
+#include "StepperGenerator.hpp"
+#include "StepperMotor.hpp"
+#include "StepperAxis.hpp"
 //#include "FastRotaryEncoder.h"
 #include <ESP32RotaryEncoder.h>
 
@@ -13,7 +15,10 @@ RotaryEncoder rotaryEncoder( 19, 18, 5, 21 );
 
 Stepper::DriverMCPWM driver(26, 25, 27);
 Stepper::Generator generator(driver);
-Stepper::Generator::GeneratorTask task;
+Stepper::Motor motor(generator);
+Stepper::RotaryAxis axis(motor);
+
+volatile float velocityDegPerSecond = 1000.0f;
 
 void setup() {
   // put your setup code here, to run once:
@@ -38,11 +43,8 @@ void setup() {
       Serial.println("Encoder1: click");
   });
 */
-  task.steps = 0;
-  task.velocity = 100000.0f;
-  task.acceleration = 1000.0f;
-  task.deceleration = 1000.0f;
-  task.direction = Stepper::Direction::Clockwise;
+  motor.setParams(200, 1.0f);
+  axis.setZero(0.0f);
 
   rotaryEncoder.setEncoderType( EncoderType::HAS_PULLUP );
 	rotaryEncoder.setBoundaries(0, 1000000, false);
@@ -51,19 +53,29 @@ void setup() {
   rotaryEncoder.onTurned([](long value) {
     Serial.print("Velocity: ");
     Serial.println(value);
-    task.velocity = value;
+    velocityDegPerSecond = static_cast<float>(value);
   });
 
   rotaryEncoder.onPressed([](unsigned long duration) {
-    Serial.println("Run task");
-    generator.run(task);
+    if (duration < 400) {
+      Serial.println("moveBy(90 deg)");
+      axis.moveBy(90.0f, velocityDegPerSecond, 720.0f, 720.0f);
+    } else {
+      Serial.println("setVelocity() 2s -> stop()");
+      axis.setVelocity(velocityDegPerSecond, 720.0f, 720.0f);
+      vTaskDelay(pdMS_TO_TICKS(2000));
+      axis.stop(720.0f);
+    }
   });
   rotaryEncoder.begin();
 
 }
 
 void loop() {
-  //Serial.printf("CurrentVelocity: %f\n", generator.getVelocity());
-  //Serial.printf("Steps: %lu\n", static_cast<uint32_t>(driver.getSteps()));
-  vTaskDelay(pdMS_TO_TICKS(5000));
+  axis.update();
+  Serial.printf("Axis pos(deg): %.2f vel(deg/s): %.2f state: %u\n",
+                axis.getPosition(),
+                axis.getVelocity(),
+                static_cast<uint8_t>(axis.getState()));
+  vTaskDelay(pdMS_TO_TICKS(250));
 }

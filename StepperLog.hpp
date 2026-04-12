@@ -1,5 +1,5 @@
-#ifndef STEPPER_LOG_H
-#define STEPPER_LOG_H
+#ifndef STEPPER_LOG_HPP
+#define STEPPER_LOG_HPP
 
 #include <esp_log.h>
 #include <esp32-hal-log.h>
@@ -25,4 +25,4 @@
   ARDUHAL_LOG_COLOR_##letter "[%s:%u] %s(): " format ARDUHAL_LOG_RESET_COLOR,  \
     pathToFileName(__FILE__), __LINE__, __FUNCTION__
 
-#endif
+#endif // STEPPER_LOG_HPP

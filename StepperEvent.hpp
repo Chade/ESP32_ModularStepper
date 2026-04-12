@@ -1,5 +1,5 @@
-#ifndef STEPPER_EVENT_H
-#define STEPPER_EVENT_H
+#ifndef STEPPER_EVENT_HPP
+#define STEPPER_EVENT_HPP
 
 #include <esp_event.h>
 #include <esp_task.h>
@@ -50,4 +50,4 @@ namespace Stepper
 
 }
 
-#endif // STEPPER_EVENT_H
+#endif // STEPPER_EVENT_HPP

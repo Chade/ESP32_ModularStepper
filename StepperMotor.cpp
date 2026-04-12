@@ -1,6 +1,9 @@
-#include "StepperMotor.h"
+#include "StepperMotor.hpp"
+#include "StepperLog.hpp"
 
 namespace Stepper {
+
+    static constexpr const char* log_tag {"Motor"};
 
     Motor::Motor(Generator& generator)
         : generator_(generator) {
@@ -9,7 +12,7 @@ namespace Stepper {
 
     bool Motor::run(const MotorTask& task) {
         Generator::GeneratorTask genTask;
-        genTask.steps = static_cast<uint32_t>(angleToSteps(task.angle));
+        genTask.steps = static_cast<uint32_t>(angleDegToSteps(task.angle));
         genTask.velocity = revolutionToSteps(task.velocity);
         genTask.acceleration = revolutionToSteps(task.acceleration);
         genTask.deceleration = revolutionToSteps(task.deceleration);
@@ -38,6 +41,16 @@ namespace Stepper {
     }
 
     void Motor::setParams(uint32_t stepsPerRevolution, float gearRatio) {
+        if (stepsPerRevolution == 0) {
+            ESP_LOGW(log_tag, "Invalid stepsPerRevolution=0. Keeping previous value: %lu", static_cast<unsigned long>(stepsPerRevolution_));
+            return;
+        }
+
+        if (gearRatio <= 0.0f) {
+            ESP_LOGW(log_tag, "Invalid gearRatio=%f. Keeping previous value: %f", gearRatio, gearRatio_);
+            return;
+        }
+
         stepsPerRevolution_ = stepsPerRevolution;
         gearRatio_ = gearRatio;
     }
@@ -47,7 +60,7 @@ namespace Stepper {
     }
 
     float Motor::getAngle() const {
-        return stepsToAngle(generator_.getStepsDone());
+        return stepsToAngleDeg(generator_.getStepsDone());
     }
 
     State Motor::getState() const {
@@ -55,6 +68,10 @@ namespace Stepper {
     }
 
     Generator& Motor::getGenerator() {
+        return generator_;
+    }
+
+    const Generator& Motor::getGenerator() const {
         return generator_;
     }
 
