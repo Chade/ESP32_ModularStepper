@@ -18,14 +18,12 @@ namespace Stepper {
         Pin(int8_t pin, Mode mode = Mode::Input_Output) {
             gpio_ = (pin > 0) ? pin : -pin;
             enableLevel_ = (pin > 0) ? 1 : 0;
-            disableLevel_  = (pin > 0) ? 0 : 1;
 
             setup(mode);
         }
 
         Pin(uint8_t pin, bool inverse = false, Mode mode = Mode::Input_Output) {
             gpio_ = pin;
-            disableLevel_ = inverse;
             enableLevel_ = !inverse;
 
             setup(mode);
@@ -57,7 +55,12 @@ namespace Stepper {
 
         bool isEnabled() const {
             uint32_t level = gpio_get_level((gpio_num_t)gpio_);
-            return (level > 0) ? enableLevel_ : disableLevel_;
+            return (level == enableLevel_);
+        };
+
+        bool isDisabled() const {
+            uint32_t level = gpio_get_level((gpio_num_t)gpio_);
+            return (level != enableLevel_);
         };
 
         void enable() {
@@ -65,7 +68,7 @@ namespace Stepper {
         };
 
         void disable() {
-            ESP_ERROR_CHECK(gpio_set_level((gpio_num_t)gpio_, disableLevel_));
+            ESP_ERROR_CHECK(gpio_set_level((gpio_num_t)gpio_, !enableLevel_));
         };
 
         void setLevel(bool level) {
@@ -77,12 +80,12 @@ namespace Stepper {
             return level;
         }
 
-        bool getLevelEnable() const {
+        bool getLevelEnabled() const {
             return enableLevel_;
         }
 
-        bool getLevelDisable() const {
-            return disableLevel_;
+        bool getLevelDisabled() const {
+            return !enableLevel_;
         }
         
         bool toggle() {
@@ -95,11 +98,7 @@ namespace Stepper {
     private:
         uint8_t gpio_ {0};
         bool enableLevel_ {1};
-        bool disableLevel_ {0};
     };
-
-    
-
 }
 
 
