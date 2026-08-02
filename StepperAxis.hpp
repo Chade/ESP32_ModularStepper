@@ -39,7 +39,7 @@ namespace Stepper {
         virtual void setZero(float axisUnit = 0.0f);
         virtual bool isHomed() const;
 
-        virtual float getPosition() const;
+        virtual float getPosition();
         virtual float getVelocity() const;
         virtual State getState() const;
 
@@ -63,7 +63,7 @@ namespace Stepper {
             Homing
         };
 
-        void syncPositionFromMotion() const;
+        void syncPositionFromMotion();
 
         Motor& motor_;
 

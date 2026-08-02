@@ -1,10 +1,13 @@
 #include "esp32-hal-gpio.h"
 #include "esp_task_wdt.h"
 #include "StepperDriver_Base.hpp"
+#include "StepperLog.hpp"
 
 namespace Stepper {
     DriverBase::DriverBase(int8_t enablePin, int8_t stepPin, int8_t directionPin, uint8_t microsteps)
             : pinEnable_(enablePin), pinStep_(stepPin), pinDirection_(directionPin), microsteps_(microsteps) {
+
+        esp_log_level_set(log_tag, ESP_LOG_INFO);
         
         // Create step task
         xTaskCreatePinnedToCore(
@@ -71,10 +74,12 @@ namespace Stepper {
     }
 
     void DriverBase::enable() {
+        ESP_LOGI(log_tag, "Enable driver");
         pinEnable_.enable();
     }
 
     void DriverBase::disable() {
+        ESP_LOGI(log_tag, "Disable driver");
         pinEnable_.disable();
     }
 
@@ -131,9 +136,11 @@ namespace Stepper {
         notification.data.doDirectionChange = 1;
 
         if (direction == Direction::Clockwise) {
+            ESP_LOGI(log_tag, "Enqueue direction change to Clockwise");
             notification.data.directionCW = 1;
         }
         else if (direction == Direction::Counterclockwise) {
+            ESP_LOGI(log_tag, "Enqueue direction change to Counterclockwise");
             notification.data.directionCCW = 1;
         }
         else {
@@ -152,9 +159,11 @@ namespace Stepper {
         notification.data.doDirectionChange = 1;
 
         if (direction == Direction::Clockwise) {
+            ESP_LOGI(log_tag, "Enqueue direction change to Clockwise");
             notification.data.directionCW = 1;
         }
         else if (direction == Direction::Counterclockwise) {
+            ESP_LOGI(log_tag, "Enqueue direction change to Counterclockwise");
             notification.data.directionCCW = 1;
         }
         else {
@@ -172,12 +181,15 @@ namespace Stepper {
 
     void DriverBase::setDirection(Direction direction) {
         if (direction == Direction::Counterclockwise) {
+            ESP_LOGI(log_tag, "Direction set to Counterclockwise");
             pinDirection_.enable();
         }
         else if (direction == Direction::Clockwise) {
+            ESP_LOGI(log_tag, "Direction set to Clockwise");
             pinDirection_.disable();
         }
         else {
+            ESP_LOGI(log_tag, "Direction set to Neutral");
             disable();
         }
     }
@@ -185,15 +197,18 @@ namespace Stepper {
     Direction DriverBase::changeDirection()
     {
         if (!isEnabled()) {
+            ESP_LOGI(log_tag, "Cannot change direction: Driver is disabled");
             return Direction::Neutral;
         }
 
         bool newDirection = pinDirection_.toggle();
 
         if (newDirection) {
+            ESP_LOGI(log_tag, "Direction changed to Counterclockwise");
             return Direction::Counterclockwise;
         }
         else {
+            ESP_LOGI(log_tag, "Direction changed to Clockwise");
             return Direction::Clockwise;
         }
     }

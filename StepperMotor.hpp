@@ -7,7 +7,7 @@ namespace Stepper {
     class Motor {
     public:
         Motor() = delete;
-        Motor(Generator& generator);
+        Motor(Generator& generator, uint32_t stepsPerRevolution = 200, float gearRatio = 1.0);
         virtual ~Motor() = default;
 
         struct MotorTask {
@@ -22,36 +22,57 @@ namespace Stepper {
         void run(float targetVelocity, float acceleration, float deceleration, Direction direction);
         void run(float angle_deg, float targetVelocity, float acceleration, float deceleration, Direction direction);
 
-        void setParams(uint32_t stepsPerRevolution, float gearRatio = 1.0);
-
-        float getVelocity() const;
-        float getAngle() const;
-        State getState() const;
-
         float angleDegToSteps(float angle_deg) const {
-            return (angle_deg / 360.0f) * stepsPerRevolution_ * gearRatio_;
+            return (angle_deg / 360.0f) * stepsPerRevolutionGeared_;
         };
 
         float stepsToAngleDeg(float steps) const {
-            return (steps / (stepsPerRevolution_ * gearRatio_)) * 360.0f;
+            return (steps / stepsPerRevolutionGeared_) * 360.0f;
         };
 
         float revolutionToSteps(float revolution) const {
-            return (revolution * stepsPerRevolution_ * gearRatio_);
+            return (revolution * stepsPerRevolutionGeared_);
         };
 
         float stepsToRevolution(float steps) const {
-            return (steps / (stepsPerRevolution_ * gearRatio_));
+            return (steps / stepsPerRevolutionGeared_);
         };
 
-        Generator& getGenerator();
-        const Generator& getGenerator() const;
+        uint32_t getStepsPerRevolution() const {
+            return stepsPerRevolution_;
+        };
+        
+        float getGearRatio() const {
+            return gearRatio_;
+        };
+
+        float getVelocity() const {
+            return stepsToRevolution(generator_.getVelocity());
+        };
+
+        float getAngle() const {
+            return stepsToAngleDeg(generator_.getStepsDone());
+        };
+
+        State getState() const {
+            return generator_.getState();
+        };
+
+
+        Generator& getGenerator() {
+            return generator_;
+        };
+
+        const Generator& getGenerator() const {
+            return generator_;
+        };
 
     private:
         Generator& generator_;
         State state_ = State::Undefined;
-        uint32_t stepsPerRevolution_ = 200;
-        float gearRatio_ = 1.0;
+        float gearRatio_;
+        uint32_t stepsPerRevolution_;
+        uint32_t stepsPerRevolutionGeared_;
     };
 }
 

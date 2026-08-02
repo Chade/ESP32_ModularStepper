@@ -308,48 +308,6 @@ namespace Stepper {
         return true;
     }
 
-    State Generator::getState() const {
-        return state_.state;
-    }
-
-    void Generator::resetState() {
-        state_.state = State::Undefined; // movement state
-
-        state_.currentDirection = Direction::Neutral; // current direction
-        state_.targetDirection  = Direction::Neutral; // target direction
-
-        state_.doDirectionChange = false; // request direction change
-
-        // Kinematic state
-        state_.currentVelocity = 0.0; // steps/s
-        state_.targetVelocity  = 0.0; // steps/s
-        state_.acceleration    = 0.0; // steps/s^2
-        state_.deceleration    = 0.0; // steps/s^2
-
-        // Distance mode state
-        state_.stepsTotal = 0; // total steps requested
-        state_.stepsDone  = 0; // steps already executed
-        state_.stepsAcc   = 0; // steps in acceleration phase
-        state_.stepsConst = 0; // steps in constant velocity phase
-        state_.stepsDec   = 0; // steps in deceleration phase
-    }
-
-    float Generator::getVelocity() const {
-        return static_cast<float>(state_.currentVelocity);
-    }
-
-    uint64_t Generator::getStepsDone() const {
-        return state_.stepsDone;
-    }
-
-    DriverBase& Generator::getDriver() {
-        return driver_;
-    }
-
-    const DriverBase& Generator::getDriver() const {
-        return driver_;
-    }
-
     uint32_t Generator::callbackOnStepDone(uint32_t stepsNew, float& pulsePeriod_us, void* user_ctx) {
         Generator* self = static_cast<Generator*>(user_ctx);
 

@@ -13,12 +13,15 @@ RotaryEncoder rotaryEncoder( 19, 18, 5, 21 );
 //Stepper::Core core;
 //Stepper::Task task;
 
-Stepper::DriverMCPWM driver(26, 25, 27);
+Stepper::DriverMCPWM driver(25, 26, 27);
 Stepper::Generator generator(driver);
 Stepper::Motor motor(generator);
-Stepper::RotaryAxis axis(motor);
 
-volatile float velocityDegPerSecond = 1000.0f;
+Stepper::Generator::GeneratorTask task;
+
+volatile float velocity = 1.0f;
+float acceleration = 10.0f;
+float deceleration = 10.0f;
 
 void setup() {
   // put your setup code here, to run once:
@@ -28,6 +31,12 @@ void setup() {
   esp_log_level_set("*", ESP_LOG_INFO);
 
   while (!Serial) { vTaskDelay(pdMS_TO_TICKS(1000)); }
+
+  task.steps = 0;
+  task.velocity = 1000.0f;
+  task.acceleration = 1000.0f;
+  task.deceleration = 1000.0f;
+  task.direction = Stepper::Direction::Counterclockwise;
 
 /*
   encoder.setup();
@@ -43,39 +52,42 @@ void setup() {
       Serial.println("Encoder1: click");
   });
 */
-  motor.setParams(200, 1.0f);
-  axis.setZero(0.0f);
 
   rotaryEncoder.setEncoderType( EncoderType::HAS_PULLUP );
-	rotaryEncoder.setBoundaries(0, 1000000, false);
-  rotaryEncoder.setStepValue(1000);
+	rotaryEncoder.setBoundaries(0, 1000, false);
+  rotaryEncoder.setStepValue(1);
 
   rotaryEncoder.onTurned([](long value) {
     Serial.print("Velocity: ");
     Serial.println(value);
-    velocityDegPerSecond = static_cast<float>(value);
+    velocity = static_cast<float>(value);
   });
 
   rotaryEncoder.onPressed([](unsigned long duration) {
     if (duration < 400) {
-      Serial.println("moveBy(90 deg)");
-      axis.moveBy(90.0f, velocityDegPerSecond, 720.0f, 720.0f);
+      Serial.println("Move by 90 degrees");
+      motor.run(90.0f, velocity, acceleration, deceleration, Stepper::Direction::Clockwise);
     } else {
-      Serial.println("setVelocity() 2s -> stop()");
-      axis.setVelocity(velocityDegPerSecond, 720.0f, 720.0f);
-      vTaskDelay(pdMS_TO_TICKS(2000));
-      axis.stop(720.0f);
+      if (motor.getVelocity() > 0.0f) {
+        Serial.println("Stopping motor");
+        motor.run(0.0f, acceleration, deceleration, Stepper::Direction::Clockwise);
+      } else {
+        
+        if (generator.run(task)) {
+          Serial.println("Run motor at constant velocity");
+        }
+        else {
+          Serial.println("Failed to run motor");
+        }
+        //motor.run(velocity, acceleration, deceleration, Stepper::Direction::Clockwise);
+      }
     }
   });
   rotaryEncoder.begin();
 
+  driver.enable();
 }
 
 void loop() {
-  axis.update();
-  Serial.printf("Axis pos(deg): %.2f vel(deg/s): %.2f state: %u\n",
-                axis.getPosition(),
-                axis.getVelocity(),
-                static_cast<uint8_t>(axis.getState()));
-  vTaskDelay(pdMS_TO_TICKS(250));
+  vTaskDelay(pdMS_TO_TICKS(1000));
 }

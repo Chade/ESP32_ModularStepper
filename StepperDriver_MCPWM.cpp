@@ -10,7 +10,6 @@ namespace Stepper {
             : DriverBase(enablePin, stepPin, directionPin, microsteps),
               timerScaleShift_((microsteps != 0) ? 32 - __builtin_clz(microsteps) : 0),
               timerResolutionHz_(timerBaseResolution_ << timerScaleShift_) {
-        esp_log_level_set(log_tag, ESP_LOG_INFO);
 
         // Calc the max pulse period based on the timer resolution and max value of the timer counter (16 bit)
         // As we count up and down, the max number of ticks within a period is 65535 * 2 = 131070
@@ -45,7 +44,7 @@ namespace Stepper {
 
     bool IRAM_ATTR DriverMCPWM::stepTimerCallbackOnStop(mcpwm_timer_handle_t timer, const mcpwm_timer_event_data_t* edata, void* user_ctx) {
         DriverMCPWM* self = static_cast<DriverMCPWM*>(user_ctx);
-        mcpwm_generator_set_force_level(self->generatorHandle_, self->pinStep_.getLevelDisable(), false);
+        mcpwm_generator_set_force_level(self->generatorHandle_, self->pinStep_.getLevelDisabled(), false);
         return false;
     }
 
@@ -99,7 +98,7 @@ namespace Stepper {
 
         mcpwm_generator_config_t generatorConfig;
         generatorConfig.gen_gpio_num = pinStep_.getPin();
-        generatorConfig.flags.invert_pwm = pinStep_.getLevelDisable();
+        generatorConfig.flags.invert_pwm = pinStep_.getLevelDisabled();
         generatorConfig.flags.io_loop_back = 0;
         generatorConfig.flags.io_od_mode = 0;
         generatorConfig.flags.pull_up = 0;
@@ -116,6 +115,7 @@ namespace Stepper {
     }
 
     void DriverMCPWM::start() {
+        ESP_LOGI(log_tag, "Starting MCPWM driver");
         isrStepCount_ = 0;
         isrStepThreshold_ = 1; // first step triggers callback to get initial batch size
         ESP_ERROR_CHECK(mcpwm_timer_set_period(stepTimerHandle_, timerTicksFromUs(pulsePeriod_us_)));
@@ -123,12 +123,14 @@ namespace Stepper {
     }
 
     void DriverMCPWM::startOnce() {
+        ESP_LOGI(log_tag, "Starting MCPWM driver once");
         ESP_ERROR_CHECK(mcpwm_timer_set_period(stepTimerHandle_, timerTicksFromUs(pulsePeriod_us_)));
         ESP_ERROR_CHECK(mcpwm_timer_start_stop(stepTimerHandle_, MCPWM_TIMER_START_STOP_FULL));
         ESP_ERROR_CHECK(mcpwm_timer_start_stop(stepTimerHandle_, MCPWM_TIMER_START_STOP_EMPTY));
     }
 
     void DriverMCPWM::stop() {
+        ESP_LOGI(log_tag, "Stopping MCPWM driver");
         ESP_ERROR_CHECK(mcpwm_timer_start_stop(stepTimerHandle_, MCPWM_TIMER_STOP_EMPTY));
     }
 }

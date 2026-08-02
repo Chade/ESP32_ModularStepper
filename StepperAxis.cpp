@@ -1,4 +1,5 @@
 #include "StepperAxis.hpp"
+#include "StepperLog.hpp"
 
 #include <esp_timer.h>
 #include <cmath>
@@ -46,10 +47,7 @@ namespace Stepper {
         float accRev = axisUnitToRevolution(accelerationAxisUnitPerSec2);
         float decRev = axisUnitToRevolution(decelerationAxisUnitPerSec2);
 
-        bool started = motor_.run(deltaRev * 360.0f, velRev, accRev, decRev, direction);
-        if (!started) {
-            return false;
-        }
+        motor_.run(deltaRev * 360.0f, velRev, accRev, decRev, direction);
 
         moveStartPositionAxisUnit_ = positionAxisUnit_;
         moveOffsetAxisUnit_ = std::fabs(deltaAxisUnit);
@@ -75,20 +73,18 @@ namespace Stepper {
         Direction direction = activeDirection_;
         if (velocityAxisUnitPerSec == 0.0f) {
             commandMode_ = CommandMode::Idle;
-            return motor_.run(0.0f, axisUnitToRevolution(accelerationAxisUnitPerSec2), axisUnitToRevolution(decelerationAxisUnitPerSec2), direction);
+            motor_.run(0.0f, axisUnitToRevolution(accelerationAxisUnitPerSec2), axisUnitToRevolution(decelerationAxisUnitPerSec2), direction);
+            return true;
         }
 
         if (direction == Direction::Neutral) {
             direction = Direction::Counterclockwise;
         }
 
-        bool started = motor_.run(axisUnitToRevolution(velocityAxisUnitPerSec),
+        motor_.run(axisUnitToRevolution(velocityAxisUnitPerSec),
                                   axisUnitToRevolution(accelerationAxisUnitPerSec2),
                                   axisUnitToRevolution(decelerationAxisUnitPerSec2),
                                   direction);
-        if (!started) {
-            return false;
-        }
 
         activeDirection_ = direction;
         commandMode_ = CommandMode::Velocity;
@@ -131,19 +127,19 @@ namespace Stepper {
 
         homingZeroOffsetAxisUnit_ = zeroOffsetAxisUnit;
 
-        bool started = motor_.run(axisUnitToRevolution(homingVelocityAxisUnitPerSec),
+        motor_.run(axisUnitToRevolution(homingVelocityAxisUnitPerSec),
                                   axisUnitToRevolution(homingAccelerationAxisUnitPerSec2),
                                   axisUnitToRevolution(homingDecelerationAxisUnitPerSec2),
                                   direction);
 
-        if (started) {
+
             activeDirection_ = direction;
             commandMode_ = CommandMode::Homing;
             commandStartPositionUs_ = esp_timer_get_time();
             velocityAxisUnitPerSec_ = homingVelocityAxisUnitPerSec;
-        }
 
-        return started;
+
+        return true;
     }
 
     void AxisBase::setZero(float axisUnit) {
@@ -162,7 +158,7 @@ namespace Stepper {
         return homed_;
     }
 
-    float AxisBase::getPosition() const {
+    float AxisBase::getPosition() {
         syncPositionFromMotion();
         return positionAxisUnit_;
     }
@@ -206,7 +202,7 @@ namespace Stepper {
         return revolutionToAxisUnit(rev);
     }
 
-    void AxisBase::syncPositionFromMotion() const {
+    void AxisBase::syncPositionFromMotion() {
         State state = motor_.getState();
 
         if (commandMode_ == CommandMode::Position || commandMode_ == CommandMode::Homing) {

@@ -24,9 +24,7 @@ namespace Stepper
     private:
         inline uint32_t timerTicksFromUs(float timeUs) {
             constexpr uint8_t scaleFixed = 12;
-
             uint32_t timeFixed = static_cast<uint32_t>(timeUs * (1 << scaleFixed));
-                
             return (timeFixed >> (scaleFixed - timerScaleShift_ + timerBaseShift_));
         };
 
@@ -50,7 +48,6 @@ namespace Stepper
         const uint32_t timerBaseResolution_ = 250'000;
         const uint8_t timerScaleShift_;
         const uint32_t timerResolutionHz_;
-        static constexpr const char* log_tag = "Driver";
 
         mcpwm_timer_handle_t stepTimerHandle_ {nullptr};
         mcpwm_oper_handle_t  operatorHandle_ {nullptr};
