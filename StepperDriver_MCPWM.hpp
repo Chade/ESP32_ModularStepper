@@ -18,6 +18,7 @@ namespace Stepper
         void init() override;
         void start() override;
         void stop() override;
+        bool isRunning() override;
         void startOnce();
         void startSync();
 
@@ -34,10 +35,9 @@ namespace Stepper
             return ticks << (timerBaseShift_ - timerScaleShift_);
         };
 
-        
         // Update function will be called periodically from the underlying task
         // with the number of steps done since last update and the new pulse period to apply.
-        void update(uint32_t stepsNew, float pulsePeriodNew_us) override;
+        void update(uint32_t stepsDone, uint32_t stepsToDo, float pulsePeriodNew_us) override;
 
         static bool comperatorCallbackOnReach(mcpwm_cmpr_handle_t comparator, const mcpwm_compare_event_data_t* edata, void* user_ctx);
         static bool stepTimerCallbackOnFull(mcpwm_timer_handle_t timer, const mcpwm_timer_event_data_t* edata, void* user_ctx);
@@ -48,6 +48,8 @@ namespace Stepper
         const uint32_t timerBaseResolution_ = 250'000;
         const uint8_t timerScaleShift_;
         const uint32_t timerResolutionHz_;
+
+        bool mcpwmTimerRunning_ {false};
 
         mcpwm_timer_handle_t stepTimerHandle_ {nullptr};
         mcpwm_oper_handle_t  operatorHandle_ {nullptr};

@@ -10,6 +10,10 @@ namespace Stepper {
             assert(stepsPerRevolution_ > 0);
             assert(gearRatio_ > 0.0f);
             stepsPerRevolutionGeared_ = stepsPerRevolution_ * gearRatio_;
+            uint8_t microsteps = generator_.getDriver().getMicrosteps();
+            if (microsteps > 1) {
+                stepsPerRevolutionGeared_ *= microsteps;
+            }
     }
 
     bool Motor::run(const MotorTask& task) {
@@ -19,6 +23,8 @@ namespace Stepper {
         genTask.acceleration = revolutionToSteps(task.acceleration);
         genTask.deceleration = revolutionToSteps(task.deceleration);
         genTask.direction = task.direction;
+        ESP_LOGI(log_tag, "Motor initialized: stepsPerRevolution=%u, gearRatio=%.2f, stepsPerRevolutionGeared=%u", stepsPerRevolution_, gearRatio_, stepsPerRevolutionGeared_);
+        ESP_LOGI(log_tag, "Steps: %u", genTask.steps);
         return generator_.run(genTask);
     }
 

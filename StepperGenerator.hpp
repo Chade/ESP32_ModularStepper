@@ -84,6 +84,8 @@ namespace Stepper
             state_.stepsDec   = 0; // steps in deceleration phase
         };
 
+        bool checkState(GeneratorState state) const;
+
         float getVelocity() const {
             return static_cast<float>(state_.currentVelocity);
         };
@@ -102,13 +104,13 @@ namespace Stepper
 
     private:
         UQ20x12 computeStepPeriodUs(UQ20x12 velocity) const;
-        bool initializeStateBeforeStep(const GeneratorTask&, GeneratorState& state);
-        bool advanceStateAfterStep(uint32_t steps, GeneratorState& state);
+        void initializeStateBeforeStep(const GeneratorTask&, GeneratorState& state);
+        void advanceStateAfterStep(uint32_t steps, GeneratorState& state);
 
         static UQ20x12 computeDeltaV(UQ20x12 acceleration, uint32_t steps, UQ20x12 velocity);
         static uint64_t computeRampSteps(UQ20x12 dv, UQ20x12 acceleration);
 
-        static uint32_t callbackOnStepDone(uint32_t stepsNew, float& pulsePeriod_us, void* user_ctx);
+        static void callbackOnStepDone(uint32_t stepsDone, uint32_t& stepsToDo, float& pulsePeriod_us, void* user_ctx);
 
         DriverBase& driver_;
 

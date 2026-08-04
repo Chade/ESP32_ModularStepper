@@ -60,12 +60,21 @@ namespace Stepper {
 
             // Check if step batch is ready
             if (notification.data.doStep) {
-                uint32_t steps = notification.data.doStep;
-                self->numStepsDone_ += steps;
+                uint32_t stepsDone = notification.data.doStep;
+                self->numStepsDone_ += stepsDone;
 
                 // Execute callback
-                self->isrStepThreshold_ = self->callbackOnStepDone_(steps, self->pulsePeriod_us_, self->callbackOnStepDoneUserCtx_);
-                self->update(steps, self->pulsePeriod_us_);
+                uint32_t stepsToDo = 0;
+                self->callbackOnStepDone_(stepsDone, stepsToDo, self->pulsePeriod_us_, self->callbackOnStepDoneUserCtx_);
+                ESP_LOGI(self->log_tag, "Callback executed: stepsTotal=%llu, stepsDone=%lu, stepsToDo=%lu, pulsePeriod_us=%.2f", self->numStepsDone_, stepsDone, stepsToDo, self->pulsePeriod_us_);
+                if (stepsToDo > 0) {
+                    self->isrStepThreshold_ = stepsToDo;
+                    self->update(stepsDone, stepsToDo, self->pulsePeriod_us_);
+                }
+                else {
+                    self->forceStepCallback();
+                    self->stop();
+                }
             }
         }
 
@@ -74,18 +83,29 @@ namespace Stepper {
     }
 
     void DriverBase::enable() {
-        ESP_LOGI(log_tag, "Enable driver");
         pinEnable_.enable();
     }
 
     void DriverBase::disable() {
-        ESP_LOGI(log_tag, "Disable driver");
         pinEnable_.disable();
     }
 
     bool DriverBase::isEnabled() const {
         return pinEnable_.isEnabled();
     }
+
+    void DriverBase::reset(bool resetSteps, bool resetStepsMissed) {
+        isrStepCount_ = 0;
+        isrStepThreshold_ = 0;
+
+        if (resetSteps) {
+            numStepsDone_ = 0;
+        }
+        if (resetStepsMissed) {
+            numStepsMissed_ = 0;
+        }
+    }
+  
 
     bool DriverBase::doStep(bool immidiately) {
         if (taskHandle_ != nullptr)
@@ -136,11 +156,9 @@ namespace Stepper {
         notification.data.doDirectionChange = 1;
 
         if (direction == Direction::Clockwise) {
-            ESP_LOGI(log_tag, "Enqueue direction change to Clockwise");
             notification.data.directionCW = 1;
         }
         else if (direction == Direction::Counterclockwise) {
-            ESP_LOGI(log_tag, "Enqueue direction change to Counterclockwise");
             notification.data.directionCCW = 1;
         }
         else {
@@ -159,11 +177,9 @@ namespace Stepper {
         notification.data.doDirectionChange = 1;
 
         if (direction == Direction::Clockwise) {
-            ESP_LOGI(log_tag, "Enqueue direction change to Clockwise");
             notification.data.directionCW = 1;
         }
         else if (direction == Direction::Counterclockwise) {
-            ESP_LOGI(log_tag, "Enqueue direction change to Counterclockwise");
             notification.data.directionCCW = 1;
         }
         else {
@@ -181,15 +197,12 @@ namespace Stepper {
 
     void DriverBase::setDirection(Direction direction) {
         if (direction == Direction::Counterclockwise) {
-            ESP_LOGI(log_tag, "Direction set to Counterclockwise");
             pinDirection_.enable();
         }
         else if (direction == Direction::Clockwise) {
-            ESP_LOGI(log_tag, "Direction set to Clockwise");
             pinDirection_.disable();
         }
         else {
-            ESP_LOGI(log_tag, "Direction set to Neutral");
             disable();
         }
     }
@@ -197,18 +210,15 @@ namespace Stepper {
     Direction DriverBase::changeDirection()
     {
         if (!isEnabled()) {
-            ESP_LOGI(log_tag, "Cannot change direction: Driver is disabled");
             return Direction::Neutral;
         }
 
         bool newDirection = pinDirection_.toggle();
 
         if (newDirection) {
-            ESP_LOGI(log_tag, "Direction changed to Counterclockwise");
             return Direction::Counterclockwise;
         }
         else {
-            ESP_LOGI(log_tag, "Direction changed to Clockwise");
             return Direction::Clockwise;
         }
     }
@@ -227,18 +237,17 @@ namespace Stepper {
         }
     }
 
-    void DriverBase::setTiming(float minPulseWidthHigh_us, float minPulseWidthLow_us, float directionDelay_us, float enableDelay_us, float maxPulsePeriod_us)
+    void DriverBase::setTiming(float minPulseWidthHigh_us, float minPulseWidthLow_us, float directionDelay_us, float enableDelay_us)
     {
         minPulseWidthHigh_us_ = minPulseWidthHigh_us;
         minPulseWidthLow_us_ = minPulseWidthLow_us;
         directionDelay_us_ = directionDelay_us;
         enableDelay_us_ = enableDelay_us;
-        maxPulsePeriod_us_ = maxPulsePeriod_us;
     }
 
     float DriverBase::getMinPulsePeriodUs() const
     {
-        return minPulseWidthHigh_us_ + minPulseWidthLow_us_;
+        return minPulsePeriod_us_;
     }
 
     float DriverBase::getMaxPulsePeriodUs() const
@@ -252,6 +261,21 @@ namespace Stepper {
 
     float DriverBase::getPulsePeriodUs() const {
         return pulsePeriod_us_;
+    }
+
+    bool DriverBase::checkPulsePeriod(float pulsePeriod_us) const {
+        float minPulseWidthHigh_us = std::max(minPulseWidthHigh_us_, minPulsePeriod_us_);
+        float minPulseWidthLow_us = std::max(minPulseWidthLow_us_, minPulsePeriod_us_);
+        
+        if (pulsePeriod_us < (minPulseWidthHigh_us + minPulseWidthLow_us)) {
+            ESP_LOGW(log_tag, "Pulse period %.2f us is shorter than allowed period: %.2f us", pulsePeriod_us, (minPulseWidthHigh_us + minPulseWidthLow_us));
+            return false;
+        }
+        else if (pulsePeriod_us > maxPulsePeriod_us_) {
+            ESP_LOGW(log_tag, "Pulse period %.2f us is longer than allowed pulse period %.2f us", pulsePeriod_us, maxPulsePeriod_us_);
+            return false;
+        }
+        return true;
     }
 
     uint8_t DriverBase::getMicrosteps() const {
@@ -280,6 +304,6 @@ namespace Stepper {
     }
 
     void DriverBase::forceStepCallback() {
-        isrStepThreshold_ = 1; // next ISR step will trigger a callback
+        isrStepThreshold_ = 0; // next ISR step will trigger a callback
     }
 }

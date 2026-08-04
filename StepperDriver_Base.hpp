@@ -9,7 +9,7 @@
 #include "StepperHelper.hpp"
 
 namespace Stepper {
-    using DriverCallback = std::function<uint32_t (uint32_t stepsNew, float& pulsePeriod_us, void* user_ctx)>;
+    using DriverCallback = std::function<void(uint32_t stepsDone, uint32_t& stepsToDo, float& pulsePeriod_us, void* user_ctx)>;
 
     class DriverBase {
     public:
@@ -22,9 +22,12 @@ namespace Stepper {
         virtual void start() = 0;
         virtual void stop() = 0;
 
+        virtual bool isRunning() = 0;
+        
         virtual void enable();
         virtual void disable();
         virtual bool isEnabled() const;
+        virtual void reset(bool resetSteps = false, bool resetStepsMissed = false);
         
         virtual bool setDirectionQueued(Direction direction);
         virtual bool setDirectionQueuedFromISR(Direction direction, BaseType_t* pxHigherPriorityTaskWoken = nullptr);
@@ -32,11 +35,13 @@ namespace Stepper {
         virtual Direction changeDirection();
         virtual Direction getDirection() const;
         
-        virtual void setTiming(float minPulseWidthHigh_us, float minPulseWidthLow_us, float directionDelay_us, float enableDelay_us, float maxPulsePeriod_us);
+        virtual void setTiming(float minPulseWidthHigh_us, float minPulseWidthLow_us, float directionDelay_us, float enableDelay_us);
         virtual float getMinPulsePeriodUs() const;
         virtual float getMaxPulsePeriodUs() const;
         virtual void setPulsePeriodUs(float pulsePeriod_us);
         virtual float getPulsePeriodUs() const;
+
+        virtual bool checkPulsePeriod(float pulsePeriod_us) const;
         
         virtual uint8_t getMicrosteps() const;
         
@@ -53,7 +58,7 @@ namespace Stepper {
         
         protected:
         static void task(void *args);
-        virtual void update(uint32_t stepsNew, float pulsePeriodNew) = 0;
+        virtual void update(uint32_t stepsDone, uint32_t stepsToDo, float pulsePeriodNew) = 0;
         
         virtual bool doStep(bool immidiately = false);
         virtual bool doStepFromISR(BaseType_t* pxHigherPriorityTaskWoken = nullptr, bool immidiately = false);
@@ -66,6 +71,7 @@ namespace Stepper {
         float minPulseWidthLow_us_ {1.0f};
         float directionDelay_us_ {0.2f};
         float enableDelay_us_ {0.2f};
+        float minPulsePeriod_us_ {1.0f};
         float maxPulsePeriod_us_ {1000000.0f};
         float pulsePeriod_us_ {0.0f};
 
@@ -75,7 +81,7 @@ namespace Stepper {
         uint64_t numStepsMissed_ {0};
 
         volatile uint32_t isrStepCount_ {0};
-        volatile uint32_t isrStepThreshold_ {1};
+        volatile uint32_t isrStepThreshold_ {0};
         portMUX_TYPE stepCountMux_ = portMUX_INITIALIZER_UNLOCKED;
 
         struct NotificationData {
@@ -93,7 +99,7 @@ namespace Stepper {
         TaskHandle_t taskHandle_ {nullptr};
 
         void* callbackOnStepDoneUserCtx_ {nullptr};
-        DriverCallback callbackOnStepDone_ = [this](uint32_t, float&, void*) -> uint32_t { return 1; };
+        DriverCallback callbackOnStepDone_ = [this](uint32_t, uint32_t&, float&, void*) {};
     protected:
         static constexpr const char* log_tag = "Driver";
     };
