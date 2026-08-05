@@ -15,7 +15,6 @@ namespace Stepper {
         minPulsePeriod_us_ = 1'000'000.0f / timerResolutionHz_;
         // Calc the max pulse period based on the timer resolution and max value of the timer counter (16 bit)
         maxPulsePeriod_us_ = timerTicksToUs(UINT16_MAX);
-        //maxPulsePeriod_us_ = timerTicksToUs(UINT16_MAX * 2);
     }
 
     DriverMCPWM::~DriverMCPWM() {
@@ -57,7 +56,6 @@ namespace Stepper {
         stepTimerConfig.clk_src = MCPWM_TIMER_CLK_SRC_DEFAULT;
         stepTimerConfig.resolution_hz = timerResolutionHz_;
         stepTimerConfig.count_mode = MCPWM_TIMER_COUNT_MODE_UP;
-        //stepTimerConfig.count_mode = MCPWM_TIMER_COUNT_MODE_UP_DOWN;
         stepTimerConfig.period_ticks = timerTicksFromUs(maxPulsePeriod_us_);
         stepTimerConfig.intr_priority = 0;
         stepTimerConfig.flags.update_period_on_empty = 1;
@@ -141,7 +139,7 @@ namespace Stepper {
         ESP_LOGI(log_tag, "MCPWM timer stopped");
     }
 
-        bool DriverMCPWM::isRunning() {
+    bool DriverMCPWM::isRunning() {
         return mcpwmTimerRunning_;
     }
 }

@@ -66,8 +66,14 @@ namespace Stepper {
                 // Execute callback
                 uint32_t stepsToDo = 0;
                 self->callbackOnStepDone_(stepsDone, stepsToDo, self->pulsePeriod_us_, self->callbackOnStepDoneUserCtx_);
-                self->isrStepThreshold_ = stepsToDo;
-                self->update(stepsDone, stepsToDo, self->pulsePeriod_us_);
+                if (stepsToDo > 0) {
+                    self->isrStepThreshold_ = stepsToDo;
+                    self->update(stepsDone, stepsToDo, self->pulsePeriod_us_);
+                }
+                else {
+                    self->forceStepCallback();
+                    self->stop();
+                }
             }
         }
 
@@ -293,6 +299,6 @@ namespace Stepper {
     }
 
     void DriverBase::forceStepCallback() {
-        isrStepThreshold_ = 1; // next ISR step will trigger a callback
+        isrStepThreshold_ = 0; // next ISR step will trigger a callback
     }
 }

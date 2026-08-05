@@ -81,7 +81,7 @@ namespace Stepper {
         uint64_t numStepsMissed_ {0};
 
         volatile uint32_t isrStepCount_ {0};
-        volatile uint32_t isrStepThreshold_ {1};
+        volatile uint32_t isrStepThreshold_ {0};
         portMUX_TYPE stepCountMux_ = portMUX_INITIALIZER_UNLOCKED;
 
         struct NotificationData {
