@@ -1,7 +1,7 @@
-#ifndef STEPPER_MOTOR_H
-#define STEPPER_MOTOR_H
+#ifndef STEPPER_MOTOR_HPP
+#define STEPPER_MOTOR_HPP
 
-#include "StepperGenerator.h"
+#include "StepperGenerator.hpp"
 
 namespace Stepper {
     class Motor {
@@ -54,4 +54,4 @@ namespace Stepper {
     };
 }
 
-#endif // STEPPER_MOTOR_H
+#endif // STEPPER_MOTOR_HPP

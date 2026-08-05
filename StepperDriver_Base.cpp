@@ -1,5 +1,5 @@
+#include "StepperDriver_Base.hpp"
 #include "esp32-hal-gpio.h"
-#include "StepperDriver_Base.h"
 #include "esp_task_wdt.h"
 
 namespace Stepper {

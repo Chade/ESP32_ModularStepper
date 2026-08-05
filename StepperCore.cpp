@@ -1,5 +1,5 @@
-#include "StepperCore.h"
-#include "StepperLog.h"
+#include "StepperCore.hpp"
+#include "StepperLog.hpp"
 
 namespace Stepper
 {

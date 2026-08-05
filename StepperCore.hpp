@@ -1,8 +1,8 @@
-#ifndef STEPPER_CORE_H
-#define STEPPER_CORE_H
+#ifndef STEPPER_CORE_HPP
+#define STEPPER_CORE_HPP
 
-#include "StepperEvent.h"
-#include "StepperTask.h"
+#include "StepperEvent.hpp"
+#include "StepperTask.hpp"
 #include <deque>
 
 namespace Stepper
@@ -38,4 +38,4 @@ namespace Stepper
     };
 }
 
-#endif // STEPPER_CORE_H
+#endif // STEPPER_CORE_HPP

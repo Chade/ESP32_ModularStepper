@@ -1,7 +1,7 @@
-#include "StepperLog.h"
-#include "StepperDriver_MCPWM.h"
-#include "StepperGenerator.h"
-//#include "FastRotaryEncoder.h"
+#include "StepperLog.hpp"
+#include "StepperDriver_MCPWM.hpp"
+#include "StepperGenerator.hpp"
+//#include "FastRotaryEncoder.hpp"
 #include <ESP32RotaryEncoder.h>
 
 
@@ -11,7 +11,7 @@ RotaryEncoder rotaryEncoder( 19, 18, 5, 21 );
 //Stepper::Core core;
 //Stepper::Task task;
 
-Stepper::DriverMCPWM driver(26, 25, 27);
+Stepper::DriverMCPWM driver(25, 26, 27, 16);
 Stepper::Generator generator(driver);
 Stepper::Generator::GeneratorTask task;
 
@@ -40,8 +40,8 @@ void setup() {
 */
   task.steps = 0;
   task.velocity = 100000.0f;
-  task.acceleration = 1000.0f;
-  task.deceleration = 1000.0f;
+  task.acceleration = 10000.0f;
+  task.deceleration = 10000.0f;
   task.direction = Stepper::Direction::Clockwise;
 
   rotaryEncoder.setEncoderType( EncoderType::HAS_PULLUP );

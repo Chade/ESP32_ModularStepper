@@ -1,12 +1,12 @@
-#ifndef STEPPER_DRIVER_BASE_H
-#define STEPPER_DRIVER_BASE_H
+#ifndef STEPPER_DRIVER_BASE_HPP
+#define STEPPER_DRIVER_BASE_HPP
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <functional>
 
-#include "StepperPin.h"
-#include "StepperHelper.h"
+#include "StepperPin.hpp"
+#include "StepperHelper.hpp"
 
 namespace Stepper {
     using DriverCallback = std::function<uint32_t (uint32_t stepsNew, float& pulsePeriod_us, void* user_ctx)>;
@@ -102,4 +102,4 @@ namespace Stepper {
     };
 }
 
-#endif //STEPPER_DRIVER_BASE_H
+#endif //STEPPER_DRIVER_BASE_HPP

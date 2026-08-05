@@ -1,5 +1,5 @@
-#ifndef STEPPER_HELPER_H
-#define STEPPER_HELPER_H
+#ifndef STEPPER_HELPER_HPP
+#define STEPPER_HELPER_HPP
 
 #include <type_traits>
 #include <cstdint>
@@ -39,4 +39,4 @@ namespace Stepper
     };
 }
 
-#endif // STEPPER_HELPER_H
+#endif // STEPPER_HELPER_HPP

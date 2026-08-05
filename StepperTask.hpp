@@ -1,5 +1,5 @@
-#ifndef STEPPER_TASK_H
-#define STEPPER_TASK_H
+#ifndef STEPPER_TASK_HPP
+#define STEPPER_TASK_HPP
 
 #include <algorithm>
 #include <cfloat>
@@ -179,4 +179,4 @@ namespace Stepper
     };
 }
 
-#endif // STEPPER_TASK_H
+#endif // STEPPER_TASK_HPP

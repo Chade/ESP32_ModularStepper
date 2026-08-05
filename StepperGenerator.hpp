@@ -1,7 +1,7 @@
-#ifndef STEPPER_GENERATOR_H
-#define STEPPER_GENERATOR_H
+#ifndef STEPPER_GENERATOR_HPP
+#define STEPPER_GENERATOR_HPP
 
-#include "StepperDriver_Base.h"
+#include "StepperDriver_Base.hpp"
 #include <stdint.h>
 #include <FixedPoints.h>
 #include <FixedPointsCommon.h>
@@ -84,4 +84,4 @@ namespace Stepper
     };
 } // namespace Stepper
 
-#endif // STEPPER_GENERATOR_H
+#endif // STEPPER_GENERATOR_HPP

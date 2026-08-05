@@ -1,4 +1,4 @@
-#include "StepperMotor.h"
+#include "StepperMotor.hpp"
 
 namespace Stepper {
 
