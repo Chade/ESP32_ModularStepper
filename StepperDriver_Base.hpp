@@ -100,7 +100,6 @@ namespace Stepper {
 
         void* callbackOnStepDoneUserCtx_ {nullptr};
         DriverCallback callbackOnStepDone_ = [this](uint32_t, uint32_t&, float&, void*) {};
-    protected:
         static constexpr const char* log_tag = "Driver";
     };
 }

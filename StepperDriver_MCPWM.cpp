@@ -26,9 +26,10 @@ namespace Stepper {
     }
 
     bool IRAM_ATTR DriverMCPWM::comperatorCallbackOnReach(mcpwm_cmpr_handle_t comparator, const mcpwm_compare_event_data_t* edata, void* user_ctx) {
-        BaseType_t xHigherPriorityTaskWoken = pdFALSE;
         DriverMCPWM* self = static_cast<DriverMCPWM*>(user_ctx);
-        self->doStepFromISR(&xHigherPriorityTaskWoken, true);
+
+        BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+        self->doStepFromISR(&xHigherPriorityTaskWoken);
         return xHigherPriorityTaskWoken;
     }
 
@@ -95,7 +96,7 @@ namespace Stepper {
         mcpwm_comparator_event_callbacks_t comperatorCallbacks;
         comperatorCallbacks.on_reach = &DriverMCPWM::comperatorCallbackOnReach;
         ESP_ERROR_CHECK(mcpwm_comparator_register_event_callbacks(comparatorHandle_, &comperatorCallbacks, this));
-        ESP_ERROR_CHECK(mcpwm_comparator_set_compare_value(comparatorHandle_, std::max(timerTicksFromUs(minPulseWidthHigh_us_), timerTicksFromUs(minPulsePeriod_us_))));
+        ESP_ERROR_CHECK(mcpwm_comparator_set_compare_value(comparatorHandle_, timerTicksFromUs(std::max(minPulseWidthHigh_us_, minPulsePeriod_us_))));
 
         mcpwm_generator_config_t generatorConfig;
         generatorConfig.gen_gpio_num = pinStep_.getPin();
