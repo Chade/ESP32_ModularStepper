@@ -33,7 +33,7 @@ void setup() {
   while (!Serial) { vTaskDelay(pdMS_TO_TICKS(1000)); }
   
   task.steps = 0;
-  task.velocity = 1000.0f;
+  task.velocity = 100000.0f;
   task.acceleration = 10000.0f;
   task.deceleration = 10000.0f;
   task.direction = Stepper::Direction::Clockwise;
@@ -49,18 +49,15 @@ void setup() {
   });
 
   rotaryEncoder.onPressed([](unsigned long duration) {
+    generator.run(task);
     if (duration < 400) {
-
-      generator.run(task);
       //motor.run(360.0f, velocity, acceleration, deceleration, Stepper::Direction::Clockwise);
     } else {
-      
       generator.run(task);
       //motor.run(velocity, acceleration, deceleration, Stepper::Direction::Clockwise);
     }
   });
   rotaryEncoder.begin();
-
 
   driver.enable();
 }

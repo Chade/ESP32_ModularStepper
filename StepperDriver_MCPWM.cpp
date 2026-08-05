@@ -1,9 +1,9 @@
+#include "StepperDriver_MCPWM.hpp"
+#include "StepperLog.hpp"
 #include "driver/mcpwm_gen.h"
 #include "hal/mcpwm_types.h"
 #include "driver/mcpwm_sync.h"
 #include "driver/mcpwm_timer.h"
-#include "StepperDriver_MCPWM.hpp"
-#include "StepperLog.hpp"
 
 namespace Stepper {
     DriverMCPWM::DriverMCPWM(int8_t enablePin, int8_t stepPin, int8_t directionPin, uint8_t microsteps)

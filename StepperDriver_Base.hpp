@@ -56,7 +56,7 @@ namespace Stepper {
         void registerCallbackOnStepDone(DriverCallback callback, void* user_ctx);
         void forceStepCallback();
         
-        protected:
+    protected:
         static void task(void *args);
         virtual void update(uint32_t stepsDone, uint32_t stepsToDo, float pulsePeriodNew) = 0;
         

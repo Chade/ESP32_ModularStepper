@@ -1,7 +1,7 @@
-#include "esp32-hal-gpio.h"
-#include "esp_task_wdt.h"
 #include "StepperDriver_Base.hpp"
 #include "StepperLog.hpp"
+#include "esp32-hal-gpio.h"
+#include "esp_task_wdt.h"
 
 namespace Stepper {
     DriverBase::DriverBase(int8_t enablePin, int8_t stepPin, int8_t directionPin, uint8_t microsteps)
