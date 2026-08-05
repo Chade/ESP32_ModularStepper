@@ -117,7 +117,9 @@ namespace Stepper {
 
     void DriverMCPWM::start() {
         reset();
-        ESP_ERROR_CHECK(mcpwm_timer_set_period(stepTimerHandle_, timerTicksFromUs(pulsePeriod_us_)));
+        ESP_LOGI(log_tag, "Start timer: pulsePeriod: %.2f  minPulsePeriod: %.2f maxPulsePeriod: %.2f", pulsePeriod_us_, minPulsePeriod_us_, maxPulsePeriod_us_);
+        //ESP_ERROR_CHECK(mcpwm_timer_set_period(stepTimerHandle_, timerTicksFromUs(pulsePeriod_us_)));
+        ESP_ERROR_CHECK(mcpwm_timer_set_period(stepTimerHandle_, 1000));
         ESP_ERROR_CHECK(mcpwm_timer_start_stop(stepTimerHandle_, MCPWM_TIMER_START_NO_STOP));
         mcpwmTimerRunning_ = true;
         ESP_LOGI(log_tag, "MCPWM timer started");

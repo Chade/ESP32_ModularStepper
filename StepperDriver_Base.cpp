@@ -66,7 +66,6 @@ namespace Stepper {
                 // Execute callback
                 uint32_t stepsToDo = 0;
                 self->callbackOnStepDone_(stepsDone, stepsToDo, self->pulsePeriod_us_, self->callbackOnStepDoneUserCtx_);
-                ESP_LOGI(self->log_tag, "Callback executed: stepsTotal=%llu, stepsDone=%lu, stepsToDo=%lu, pulsePeriod_us=%.2f", self->numStepsDone_, stepsDone, stepsToDo, self->pulsePeriod_us_);
                 if (stepsToDo > 0) {
                     self->isrStepThreshold_ = stepsToDo;
                     self->update(stepsDone, stepsToDo, self->pulsePeriod_us_);

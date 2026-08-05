@@ -13,7 +13,7 @@ RotaryEncoder rotaryEncoder( 19, 18, 5, 21 );
 //Stepper::Core core;
 //Stepper::Task task;
 
-Stepper::DriverMCPWM driver(25, 26, 27);
+Stepper::DriverMCPWM driver(25, 26, 27, 16);
 Stepper::Generator generator(driver);
 Stepper::Motor motor(generator);
 
@@ -32,30 +32,29 @@ void setup() {
 
   while (!Serial) { vTaskDelay(pdMS_TO_TICKS(1000)); }
   
-  
-  task.velocity = 2.0f;
-  task.acceleration = 1000.0f;
-  task.deceleration = 1000.0f;
+  task.steps = 0;
+  task.velocity = 1000.0f;
+  task.acceleration = 10000.0f;
+  task.deceleration = 10000.0f;
   task.direction = Stepper::Direction::Clockwise;
   
   rotaryEncoder.setEncoderType( EncoderType::HAS_PULLUP );
-	rotaryEncoder.setBoundaries(0, 100, false);
-  rotaryEncoder.setStepValue(1);
+	rotaryEncoder.setBoundaries(0, 1'000'000, false);
+  rotaryEncoder.setStepValue(1000);
 
   rotaryEncoder.onTurned([](long value) {
-    steps++;
-    Serial.print("Steps: ");
-    Serial.println(steps);
-    task.steps = value;
+    Serial.print("Velocity: ");
+    Serial.println(value);
+    task.velocity = value;
   });
 
   rotaryEncoder.onPressed([](unsigned long duration) {
     if (duration < 400) {
-      Serial.println("Move by 360 degrees");
+
       generator.run(task);
       //motor.run(360.0f, velocity, acceleration, deceleration, Stepper::Direction::Clockwise);
     } else {
-      task.steps = 0;
+      
       generator.run(task);
       //motor.run(velocity, acceleration, deceleration, Stepper::Direction::Clockwise);
     }

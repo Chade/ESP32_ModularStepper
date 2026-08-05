@@ -25,7 +25,7 @@ namespace Stepper
     private:
         inline uint32_t timerTicksFromUs(float timeUs) {
             constexpr uint8_t scaleFixed = 12;
-            uint32_t timeFixed = static_cast<uint32_t>(timeUs * (1 << scaleFixed));
+            uint32_t timeFixed = static_cast<uint32_t>(std::max(timeUs, minPulsePeriod_us_) * (1 << scaleFixed));
             return (timeFixed >> (scaleFixed - timerScaleShift_ + timerBaseShift_));
         };
 
