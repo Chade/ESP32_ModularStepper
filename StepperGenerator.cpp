@@ -82,21 +82,84 @@ namespace Stepper {
     /// Avoids the precision loss from computing the tiny dt = steps/velocity first.
     /// Mathematically: dv = acceleration * steps / velocity
     /// In raw representation: dv_raw = acceleration_raw * steps * Scale / velocity_raw
-    UQ20x12 Generator::computeDeltaV(UQ20x12 acceleration, uint32_t steps, UQ20x12 velocity) {
+    UQ20x12 Generator::computeDeltaV(UQ20x12 rate, uint32_t steps, UQ20x12 velocity, bool isDeceleration) {
         constexpr uint64_t scale = UQ20x12::Scale; // 2^12 = 4096
-        uint64_t vel_raw = static_cast<uint64_t>(velocity.getInternal());
         
+        uint64_t acc_raw = static_cast<uint64_t>(rate.getInternal());
+        if (acc_raw == 0) {
+            return UQ20x12(0);
+        }
+        
+        uint64_t vel_raw = static_cast<uint64_t>(velocity.getInternal());
         if (vel_raw == 0) {
-            return UQ20x12::MaxValue;
+            // Standstill acceleration: v_new = sqrt(2 * a * s)
+            // In raw fixed-point: dv_raw = sqrt(2 * acc_raw * steps * scale)
+            uint64_t arg = 2 * acc_raw * static_cast<uint64_t>(steps) * scale;
+            uint64_t result_raw = static_cast<uint64_t>(std::sqrt(arg));
+            constexpr uint64_t max_raw = static_cast<uint64_t>(UQ20x12::MaxValue.getInternal());
+            return UQ20x12::fromInternal(static_cast<uint32_t>(result_raw > max_raw ? max_raw : result_raw));
+        }
+            
+        uint64_t result_raw = (acc_raw * static_cast<uint64_t>(steps) * scale) / vel_raw;
+        
+        // Clamp to UQ20x12 range to prevent overflow on conversion back to 32-bit
+        constexpr uint64_t max_raw = static_cast<uint64_t>(UQ20x12::MaxValue.getInternal());
+        return UQ20x12::fromInternal(static_cast<uint32_t>(result_raw > max_raw ? max_raw : result_raw));
+    }
+
+   // ---- 64-bit safe fixed-point arithmetic helpers ----
+   //
+   // UQ20x12 uses a 32-bit internal representation (20 integer + 12 fraction bits).
+   // At high velocities (200k steps/s) and accelerations (~10k steps/s²),
+   // naive fixed-point operations cause:
+   //   1) Overflow: dv * dv can reach 4e10, far exceeding UQ20x12 max (~1M)
+   //   2) Precision loss: dt = steps/velocity can be <1 LSB (1/4096) and truncate to 0
+   //
+   // These helpers use 64-bit intermediates to avoid both problems.
+
+   /// Compute exact velocity change dv over 'steps' using 64-bit fixed-point kinematics.
+   /// Acceleration: dv = sqrt(v² + 2*a*s) - v
+   /// Deceleration: dv = v - sqrt(max(0, v² - 2*d*s))
+
+    /*UQ20x12 Generator::computeDeltaV(UQ20x12 rate, uint32_t steps, UQ20x12 velocity, bool isDeceleration) {
+        constexpr uint64_t scale = UQ20x12::Scale; // 2^12 = 4096
+        
+        uint64_t rate_raw = static_cast<uint64_t>(rate.getInternal());
+        if (rate_raw == 0 || steps == 0) {
+            return UQ20x12(0);
         }
 
-        uint64_t num = static_cast<uint64_t>(acceleration.getInternal()) * static_cast<uint64_t>(steps);
-        uint64_t result_raw = (num * scale) / vel_raw;
+        uint64_t vel_raw = static_cast<uint64_t>(velocity.getInternal());
+        uint64_t two_a_s_scale = 2 * rate_raw * static_cast<uint64_t>(steps) * scale;
+
+        uint64_t dv_raw = 0;
+
+        if (!isDeceleration) {
+            // Acceleration: v_new = sqrt(v² + 2*a*s)
+            uint64_t v_sq = vel_raw * vel_raw;
+            uint64_t v_new_sq = 0;
+            if (UINT64_MAX - v_sq < two_a_s_scale) {
+                v_new_sq = UINT64_MAX;
+            } else {
+                v_new_sq = v_sq + two_a_s_scale;
+            }
+            uint64_t v_new_raw = static_cast<uint64_t>(std::sqrt(v_new_sq));
+            dv_raw = (v_new_raw > vel_raw) ? (v_new_raw - vel_raw) : 0;
+        } else {
+            // Deceleration: v_new = sqrt(max(0, v² - 2*d*s))
+            uint64_t v_sq = vel_raw * vel_raw;
+            if (v_sq <= two_a_s_scale) {
+                return velocity; // Decelerates all the way to 0
+            }
+            uint64_t v_new_sq = v_sq - two_a_s_scale;
+            uint64_t v_new_raw = static_cast<uint64_t>(std::sqrt(v_new_sq));
+            dv_raw = (vel_raw > v_new_raw) ? (vel_raw - v_new_raw) : 0;
+        }
 
         // Clamp to UQ20x12 range to prevent overflow on conversion back to 32-bit
-        constexpr uint64_t maxRaw = static_cast<uint64_t>(UQ20x12::MaxValue.getInternal());
-        return UQ20x12::fromInternal(static_cast<uint32_t>(result_raw > maxRaw ? maxRaw : result_raw));
-    }
+        constexpr uint64_t max_raw = static_cast<uint64_t>(UQ20x12::MaxValue.getInternal());
+        return UQ20x12::fromInternal(static_cast<uint32_t>(dv_raw > max_raw ? max_raw : dv_raw));
+    }*/
 
     /// Compute s = dv² / (2 * acceleration) as integer step count using 64-bit intermediates.
     /// Avoids overflow from squaring large velocity deltas in 32-bit fixed-point.
@@ -231,7 +294,7 @@ namespace Stepper {
                 if (state.currentVelocity > 0.0) {
                     state.state = State::Decelerating;
 
-                    UQ20x12 dv = computeDeltaV(state.deceleration, steps, state.currentVelocity);
+                    UQ20x12 dv = computeDeltaV(state.deceleration, steps, state.currentVelocity, true);
                     if (dv >= state.currentVelocity) {
                         state.currentVelocity = 0.0;
                     }
@@ -249,7 +312,7 @@ namespace Stepper {
                     if (state.currentVelocity > 0.0) {
                         state.state = State::Decelerating;
 
-                        UQ20x12 dv = computeDeltaV(state.deceleration, steps, state.currentVelocity);
+                        UQ20x12 dv = computeDeltaV(state.deceleration, steps, state.currentVelocity, true);
                         if (dv >= state.currentVelocity) {
                             state.currentVelocity = 0.0;
                         }
@@ -270,7 +333,7 @@ namespace Stepper {
                     if (state.currentVelocity < state.targetVelocity) {
                         state.state = State::Accelerating;
 
-                        UQ20x12 dv = computeDeltaV(state.acceleration, steps, state.currentVelocity);
+                        UQ20x12 dv = computeDeltaV(state.acceleration, steps, state.currentVelocity, false);
                         state.currentVelocity = state.currentVelocity + dv;
                         if (state.currentVelocity > state.targetVelocity) {
                             state.currentVelocity = state.targetVelocity;
@@ -279,7 +342,7 @@ namespace Stepper {
                     else if (state.currentVelocity > state.targetVelocity) {
                         state.state = State::Decelerating;
 
-                        UQ20x12 dv = computeDeltaV(state.deceleration, steps, state.currentVelocity);
+                        UQ20x12 dv = computeDeltaV(state.deceleration, steps, state.currentVelocity, true);
                         if (dv >= state.currentVelocity) {
                             state.currentVelocity = state.targetVelocity;
                         } else {
@@ -303,7 +366,7 @@ namespace Stepper {
                 // Accelerating
                 state.state = State::Accelerating;
 
-                UQ20x12 dv = computeDeltaV(state.acceleration, steps, state.currentVelocity);
+                UQ20x12 dv = computeDeltaV(state.acceleration, steps, state.currentVelocity, false);
                 state.currentVelocity = state.currentVelocity + dv;
                 if (state.currentVelocity > state.targetVelocity) {
                     state.currentVelocity = state.targetVelocity;
@@ -317,7 +380,7 @@ namespace Stepper {
                 // Decelerating
                 state.state = State::Decelerating;
 
-                UQ20x12 dv = computeDeltaV(state.deceleration, steps, state.currentVelocity);
+                UQ20x12 dv = computeDeltaV(state.deceleration, steps, state.currentVelocity, true);
                 if (dv >= state.currentVelocity) {
                     state.currentVelocity = 0.0;
                 } else {
