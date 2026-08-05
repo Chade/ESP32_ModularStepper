@@ -15,7 +15,7 @@ namespace Stepper {
     }
 
     bool Generator::run(const GeneratorTask& task) {
-        ESP_LOGI(log_tag, "New task");
+        ESP_LOGI(log_tag, "Initialize generator state");
         if (initializeStateBeforeStep(task, state_)) {
             // Set driver direction
             driver_.setDirection(state_.targetDirection);
@@ -131,6 +131,31 @@ namespace Stepper {
         period_us = (period_us > maxPeriod_us) ? maxPeriod_us : period_us;
 
         return period_us;
+    }
+
+        bool Generator::checkState(GeneratorState state) const {
+        bool ret = true;
+        if (state.targetVelocity < 0.0f) {
+            ESP_LOGW(log_tag, "Generator state invalid: targetVelocity needs to be positive");
+            ret = false;
+        }
+        else if (state.targetVelocity == 0.0f) {
+            if (state.stepsTotal > 0) {
+                ESP_LOGW(log_tag, "Generator state invalid: stepsTotal > 0 but targetVelocity == 0");
+                ret = false;
+            }
+        }
+        else if (state.targetVelocity > 0.0f ) {
+            if (state.targetDirection == Direction::Neutral) {
+                ESP_LOGW(log_tag, "Generator state invalid: targetVelocity > 0 but targetDirection == Neutral");
+                ret = false;
+            }
+            if (!driver_.checkPulsePeriod(static_cast<float>(computeStepPeriodUs(state.targetVelocity)))) {
+                ESP_LOGW(log_tag, "Generator state invalid: targetVelocity results in invalid pulse period");
+                ret = false;
+            }
+        }
+        return ret;
     }
 
     bool Generator::initializeStateBeforeStep(const GeneratorTask& task, GeneratorState& state) {
@@ -308,50 +333,12 @@ namespace Stepper {
         return true;
     }
 
-    State Generator::getState() const {
-        return state_.state;
-    }
-
-    void Generator::resetState() {
-        state_.state = State::Undefined; // movement state
-
-        state_.currentDirection = Direction::Neutral; // current direction
-        state_.targetDirection  = Direction::Neutral; // target direction
-
-        state_.doDirectionChange = false; // request direction change
-
-        // Kinematic state
-        state_.currentVelocity = 0.0; // steps/s
-        state_.targetVelocity  = 0.0; // steps/s
-        state_.acceleration    = 0.0; // steps/s^2
-        state_.deceleration    = 0.0; // steps/s^2
-
-        // Distance mode state
-        state_.stepsTotal = 0; // total steps requested
-        state_.stepsDone  = 0; // steps already executed
-        state_.stepsAcc   = 0; // steps in acceleration phase
-        state_.stepsConst = 0; // steps in constant velocity phase
-        state_.stepsDec   = 0; // steps in deceleration phase
-    }
-
-    float Generator::getVelocity() const {
-        return static_cast<float>(state_.currentVelocity);
-    }
-
-    uint64_t Generator::getStepsDone() const {
-        return state_.stepsDone;
-    }
-
-    DriverBase& Generator::getDriver() {
-        return driver_;
-    }
-
-    uint32_t Generator::callbackOnStepDone(uint32_t stepsNew, float& pulsePeriod_us, void* user_ctx) {
+    void Generator::callbackOnStepDone(uint32_t stepsDone, uint32_t& stepsToDo, float& pulsePeriod_us, void* user_ctx) {
         Generator* self = static_cast<Generator*>(user_ctx);
 
         // The driver only calls us when the batch threshold is reached.
         // Always recalculate velocity for the accumulated step batch.
-        if (self->advanceStateAfterStep(stepsNew, self->state_)) {
+        if (self->advanceStateAfterStep(stepsDone, self->state_)) {
             // Check if direction change is pending
             if (self->state_.doDirectionChange) {
                 self->state_.currentDirection = self->driver_.changeDirection();
@@ -362,32 +349,33 @@ namespace Stepper {
             // During acc/dec: batch = v/a steps (one velocity quantum).
             // During const:   batch = remaining constant-phase steps (step mode)
             //                        or a large value (velocity mode).
-            uint32_t nextBatch = 1;
             if (self->state_.state == State::Accelerating) {
-                nextBatch = static_cast<uint32_t>(self->state_.currentVelocity / self->state_.acceleration);
+                stepsToDo = static_cast<uint32_t>(self->state_.currentVelocity / self->state_.acceleration);
             }
             else if (self->state_.state == State::Decelerating) {
-                nextBatch = static_cast<uint32_t>(self->state_.currentVelocity / self->state_.deceleration);
+                stepsToDo = static_cast<uint32_t>(self->state_.currentVelocity / self->state_.deceleration);
             }
             else if (self->state_.state == State::Running) {
                 if (self->state_.stepsTotal > 0) {
                     // Step mode: next batch covers remaining constant-velocity steps
                     uint64_t constEnd = self->state_.stepsAcc + self->state_.stepsConst;
                     uint64_t remaining = (self->state_.stepsDone < constEnd) ? (constEnd - self->state_.stepsDone) : 1;
-                    return static_cast<uint32_t>((remaining > UINT32_MAX) ? UINT32_MAX : remaining);
+                    stepsToDo = static_cast<uint32_t>((remaining > UINT32_MAX) ? UINT32_MAX : remaining);
+                    return;
                 } else {
                     // Velocity mode: no ramp needed, check infrequently
                     // (forceStepCallback() will override if user calls run() again)
-                    return static_cast<uint32_t>((self->state_.currentVelocity + 999) / 1000);
+                    stepsToDo = static_cast<uint32_t>((self->state_.currentVelocity + 999) / 1000);
+                    return;
                 }
             }
 
             pulsePeriod_us = static_cast<float>(self->computeStepPeriodUs(self->state_.currentVelocity));
-            return nextBatch;
+            return;
         }
         else {
             self->driver_.stop();
-            return 0;
+            stepsToDo = 0;
         }
     }
 

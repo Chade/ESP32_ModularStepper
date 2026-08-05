@@ -45,7 +45,7 @@ void setup() {
   task.direction = Stepper::Direction::Clockwise;
 
   rotaryEncoder.setEncoderType( EncoderType::HAS_PULLUP );
-	rotaryEncoder.setBoundaries(0, 1000000, false);
+	rotaryEncoder.setBoundaries(0, 1'000'000, false);
   rotaryEncoder.setStepValue(1000);
 
   rotaryEncoder.onTurned([](long value) {

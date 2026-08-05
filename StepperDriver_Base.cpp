@@ -1,4 +1,5 @@
 #include "StepperDriver_Base.hpp"
+#include "StepperLog.hpp"
 #include "esp32-hal-gpio.h"
 #include "esp_task_wdt.h"
 
@@ -6,6 +7,8 @@ namespace Stepper {
     DriverBase::DriverBase(int8_t enablePin, int8_t stepPin, int8_t directionPin, uint8_t microsteps)
             : pinEnable_(enablePin), pinStep_(stepPin), pinDirection_(directionPin), microsteps_(microsteps) {
         
+        esp_log_level_set(log_tag, ESP_LOG_INFO);
+
         // Create step task
         xTaskCreatePinnedToCore(
             DriverBase::task,    /* Task function */
@@ -57,12 +60,14 @@ namespace Stepper {
 
             // Check if step batch is ready
             if (notification.data.doStep) {
-                uint32_t steps = notification.data.doStep;
-                self->numStepsDone_ += steps;
+                uint32_t stepsDone = notification.data.doStep;
+                self->numStepsDone_ += stepsDone;
 
                 // Execute callback
-                self->isrStepThreshold_ = self->callbackOnStepDone_(steps, self->pulsePeriod_us_, self->callbackOnStepDoneUserCtx_);
-                self->update(steps, self->pulsePeriod_us_);
+                uint32_t stepsToDo = 0;
+                self->callbackOnStepDone_(stepsDone, stepsToDo, self->pulsePeriod_us_, self->callbackOnStepDoneUserCtx_);
+                self->isrStepThreshold_ = stepsToDo;
+                self->update(stepsDone, stepsToDo, self->pulsePeriod_us_);
             }
         }
 
@@ -82,7 +87,20 @@ namespace Stepper {
         return pinEnable_.isEnabled();
     }
 
-    bool DriverBase::doStep() {
+    void DriverBase::reset(bool resetSteps, bool resetStepsMissed) {
+        isrStepCount_ = 0;
+        isrStepThreshold_ = 0;
+
+        if (resetSteps) {
+            numStepsDone_ = 0;
+        }
+        if (resetStepsMissed) {
+            numStepsMissed_ = 0;
+        }
+    }
+  
+
+    bool DriverBase::doStep(bool immidiately) {
         if (taskHandle_ != nullptr)
         {
             portENTER_CRITICAL(&stepCountMux_);
@@ -90,7 +108,7 @@ namespace Stepper {
             bool notify = (isrStepCount_ >= isrStepThreshold_);
             portEXIT_CRITICAL(&stepCountMux_);
 
-            if (notify) {
+            if (notify || immidiately) {
                 uint32_t steps = isrStepCount_;
                 isrStepCount_ = 0;
                 isrStepThreshold_ = UINT32_MAX; // suppress notifications during callback
@@ -101,7 +119,7 @@ namespace Stepper {
         return false;
     }
 
-    bool IRAM_ATTR DriverBase::doStepFromISR(BaseType_t* pxHigherPriorityTaskWoken) {
+    bool IRAM_ATTR DriverBase::doStepFromISR(BaseType_t* pxHigherPriorityTaskWoken, bool immidiately) {
         if (taskHandle_ != nullptr)
         {
             portENTER_CRITICAL(&stepCountMux_);
@@ -109,7 +127,7 @@ namespace Stepper {
             bool notify = (isrStepCount_ >= isrStepThreshold_);
             portEXIT_CRITICAL(&stepCountMux_);
 
-            if (notify) {
+            if (notify || immidiately) {
                 uint32_t steps = isrStepCount_;
                 isrStepCount_ = 0;
                 isrStepThreshold_ = UINT32_MAX; // suppress notifications during callback
@@ -208,18 +226,17 @@ namespace Stepper {
         }
     }
 
-    void DriverBase::setTiming(float minPulseWidthHigh_us, float minPulseWidthLow_us, float directionDelay_us, float enableDelay_us, float maxPulsePeriod_us)
+    void DriverBase::setTiming(float minPulseWidthHigh_us, float minPulseWidthLow_us, float directionDelay_us, float enableDelay_us)
     {
         minPulseWidthHigh_us_ = minPulseWidthHigh_us;
         minPulseWidthLow_us_ = minPulseWidthLow_us;
         directionDelay_us_ = directionDelay_us;
         enableDelay_us_ = enableDelay_us;
-        maxPulsePeriod_us_ = maxPulsePeriod_us;
     }
 
     float DriverBase::getMinPulsePeriodUs() const
     {
-        return minPulseWidthHigh_us_ + minPulseWidthLow_us_;
+        return minPulsePeriod_us_;
     }
 
     float DriverBase::getMaxPulsePeriodUs() const
@@ -233,6 +250,21 @@ namespace Stepper {
 
     float DriverBase::getPulsePeriodUs() const {
         return pulsePeriod_us_;
+    }
+    
+    bool DriverBase::checkPulsePeriod(float pulsePeriod_us) const {
+        float minPulseWidthHigh_us = std::max(minPulseWidthHigh_us_, minPulsePeriod_us_);
+        float minPulseWidthLow_us = std::max(minPulseWidthLow_us_, minPulsePeriod_us_);
+        
+        if (pulsePeriod_us < (minPulseWidthHigh_us + minPulseWidthLow_us)) {
+            ESP_LOGW(log_tag, "Pulse period %.2f us is shorter than allowed period: %.2f us", pulsePeriod_us, (minPulseWidthHigh_us + minPulseWidthLow_us));
+            return false;
+        }
+        else if (pulsePeriod_us > maxPulsePeriod_us_) {
+            ESP_LOGW(log_tag, "Pulse period %.2f us is longer than allowed pulse period %.2f us", pulsePeriod_us, maxPulsePeriod_us_);
+            return false;
+        }
+        return true;
     }
 
     uint8_t DriverBase::getMicrosteps() const {

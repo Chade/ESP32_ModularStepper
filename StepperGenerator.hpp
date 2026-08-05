@@ -36,16 +36,6 @@ namespace Stepper
         // Returns immediately; generator schedules steps until done.
         bool run(uint64_t steps, float targetVelocity, float acceleration, float deceleration, Direction direction);
 
-        State getState() const;
-        void resetState();
-
-        float getVelocity() const;
-        uint64_t getStepsDone() const;
-
-        DriverBase& getDriver();
-
-    private:
-
         struct GeneratorState {
             State state = State::Undefined; // movement state
 
@@ -68,14 +58,67 @@ namespace Stepper
             uint64_t stepsDec   = 0; // steps in deceleration phase
         } state_;
 
-        UQ20x12 computeStepPeriodUs(UQ20x12 velocity) const;
+        GeneratorState getState() const {
+            return state_;
+        };
+
+        void resetState() {
+            state_.state = State::Undefined; // movement state
+
+            state_.currentDirection = Direction::Neutral; // current direction
+            state_.targetDirection  = Direction::Neutral; // target direction
+
+            state_.doDirectionChange = false; // request direction change
+
+            // Kinematic state
+            state_.currentVelocity = 0.0; // steps/s
+            state_.targetVelocity  = 0.0; // steps/s
+            state_.acceleration    = 0.0; // steps/s^2
+            state_.deceleration    = 0.0; // steps/s^2
+
+            // Distance mode state
+            state_.stepsTotal = 0; // total steps requested
+            state_.stepsDone  = 0; // steps already executed
+            state_.stepsAcc   = 0; // steps in acceleration phase
+            state_.stepsConst = 0; // steps in constant velocity phase
+            state_.stepsDec   = 0; // steps in deceleration phase
+        };
+
+        bool checkState(GeneratorState state) const;
+
+        float getVelocity() const {
+            return static_cast<float>(state_.currentVelocity);
+        };
+
+        uint64_t getStepsDone() const {
+            return state_.stepsDone;
+        };
+
+        DriverBase& getDriver() {
+            return driver_;
+        };
+
+        const DriverBase& getDriver() const {
+            return driver_;
+        };
+
+        bool initializeStateBeforeStep(const GeneratorTask& task) {
+            return initializeStateBeforeStep(task, state_);
+        };
+
+        bool advanceStateAfterStep(uint32_t steps) {
+            return advanceStateAfterStep(steps, state_);
+        };
+
+    private:
         bool initializeStateBeforeStep(const GeneratorTask&, GeneratorState& state);
         bool advanceStateAfterStep(uint32_t steps, GeneratorState& state);
 
+        UQ20x12 computeStepPeriodUs(UQ20x12 velocity) const;
         static UQ20x12 computeDeltaV(UQ20x12 acceleration, uint32_t steps, UQ20x12 velocity);
         static uint64_t computeRampSteps(UQ20x12 dv, UQ20x12 acceleration);
 
-        static uint32_t callbackOnStepDone(uint32_t stepsNew, float& pulsePeriod_us, void* user_ctx);
+        static void callbackOnStepDone(uint32_t stepsDone, uint32_t& stepsToDo, float& pulsePeriod_us, void* user_ctx);
 
         DriverBase& driver_;
 
