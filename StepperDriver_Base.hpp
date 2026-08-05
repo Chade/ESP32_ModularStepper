@@ -38,10 +38,11 @@ namespace Stepper {
         virtual void setTiming(float minPulseWidthHigh_us, float minPulseWidthLow_us, float directionDelay_us, float enableDelay_us);
         virtual float getMinPulsePeriodUs() const;
         virtual float getMaxPulsePeriodUs() const;
-        virtual void setPulsePeriodUs(float pulsePeriod_us);
+        virtual bool setPulsePeriodUs(float pulsePeriod_us);
         virtual float getPulsePeriodUs() const;
         
-        virtual bool checkPulsePeriod(float pulsePeriod_us) const;
+        virtual bool checkPulsePeriod(float pulsePeriod_us);
+        virtual bool checkPulsePeriod(float pulsePeriod_us, float& pulsePeriodNew_us);
 
         virtual uint8_t getMicrosteps() const;
         

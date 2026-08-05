@@ -115,9 +115,11 @@ namespace Stepper {
             portEXIT_CRITICAL(&stepCountMux_);
 
             if (notify || immidiately) {
+                portENTER_CRITICAL(&stepCountMux_);
                 uint32_t steps = isrStepCount_;
                 isrStepCount_ = 0;
                 isrStepThreshold_ = UINT32_MAX; // suppress notifications during callback
+                portEXIT_CRITICAL(&stepCountMux_);
                 return xTaskNotify(taskHandle_, steps, eNotifyAction::eSetBits);
             }
             return true;
@@ -134,9 +136,11 @@ namespace Stepper {
             portEXIT_CRITICAL(&stepCountMux_);
 
             if (notify || immidiately) {
+                portENTER_CRITICAL(&stepCountMux_);
                 uint32_t steps = isrStepCount_;
                 isrStepCount_ = 0;
                 isrStepThreshold_ = UINT32_MAX; // suppress notifications during callback
+                portEXIT_CRITICAL(&stepCountMux_);
                 BaseType_t xHigherPriorityTaskWokenLocal = pdFALSE;
                 BaseType_t* pFlag = pxHigherPriorityTaskWoken ? pxHigherPriorityTaskWoken : &xHigherPriorityTaskWokenLocal;
                 return xTaskNotifyFromISR(taskHandle_, steps, eNotifyAction::eSetBits, pFlag);
@@ -250,26 +254,34 @@ namespace Stepper {
         return maxPulsePeriod_us_;
     }
 
-    void DriverBase::setPulsePeriodUs(float pulsePeriod_us) {
-        pulsePeriod_us_ = pulsePeriod_us;
+    bool DriverBase::setPulsePeriodUs(float pulsePeriod_us) {
+        return checkPulsePeriod(pulsePeriod_us, pulsePeriod_us_);
     }
 
     float DriverBase::getPulsePeriodUs() const {
         return pulsePeriod_us_;
     }
     
-    bool DriverBase::checkPulsePeriod(float pulsePeriod_us) const {
+    bool DriverBase::checkPulsePeriod(float pulsePeriod_us) {
+        float pulsePeriodNew_us = 0.0;
+        return checkPulsePeriod(pulsePeriod_us, pulsePeriodNew_us);
+    }
+
+    bool DriverBase::checkPulsePeriod(float pulsePeriod_us, float& pulePeriodNew_us) {
         float minPulseWidthHigh_us = std::max(minPulseWidthHigh_us_, minPulsePeriod_us_);
         float minPulseWidthLow_us = std::max(minPulseWidthLow_us_, minPulsePeriod_us_);
         
         if (pulsePeriod_us < (minPulseWidthHigh_us + minPulseWidthLow_us)) {
             ESP_LOGW(log_tag, "Pulse period %.2f us is shorter than allowed period: %.2f us", pulsePeriod_us, (minPulseWidthHigh_us + minPulseWidthLow_us));
+            pulePeriodNew_us = (minPulseWidthHigh_us + minPulseWidthLow_us);
             return false;
         }
         else if (pulsePeriod_us > maxPulsePeriod_us_) {
             ESP_LOGW(log_tag, "Pulse period %.2f us is longer than allowed pulse period %.2f us", pulsePeriod_us, maxPulsePeriod_us_);
+            pulePeriodNew_us = maxPulsePeriod_us_;
             return false;
         }
+        pulePeriodNew_us = pulsePeriod_us;
         return true;
     }
 

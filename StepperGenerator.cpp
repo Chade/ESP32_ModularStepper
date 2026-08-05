@@ -104,14 +104,14 @@ namespace Stepper {
     uint64_t Generator::computeRampSteps(UQ20x12 dv, UQ20x12 acceleration) {
         constexpr uint64_t scale = UQ20x12::Scale; // 2^12 = 4096
         uint64_t dv_raw   = static_cast<uint64_t>(dv.getInternal());
-        uint64_t acceleration_raw = static_cast<uint64_t>(acceleration.getInternal());
-
-        if (acceleration_raw == 0) {
+        
+        uint64_t acc_raw = static_cast<uint64_t>(acceleration.getInternal());
+        if (acc_raw == 0) {
             return 0;
         }
 
         // s = dv² / (2*a) = dv_raw² / (2 * Scale * a_raw)
-        return (dv_raw * dv_raw) / (2 * scale * acceleration_raw);
+        return (dv_raw * dv_raw) / (2 * scale * acc_raw);
     }
 
     UQ20x12 Generator::computeStepPeriodUs(UQ20x12 velocity) const {
@@ -371,7 +371,6 @@ namespace Stepper {
             }
 
             pulsePeriod_us = static_cast<float>(self->computeStepPeriodUs(self->state_.currentVelocity));
-            return;
         }
         else {
             self->driver_.stop();
