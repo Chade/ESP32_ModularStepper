@@ -338,43 +338,46 @@ namespace Stepper {
 
         // The driver only calls us when the batch threshold is reached.
         // Always recalculate velocity for the accumulated step batch.
-        if (self->advanceStateAfterStep(stepsDone, self->state_)) {
-            // Check if direction change is pending
-            if (self->state_.doDirectionChange) {
-                self->state_.currentDirection = self->driver_.changeDirection();
-                self->state_.doDirectionChange = false;
-            }
+        self->advanceStateAfterStep(stepsDone, self->state_);
+        
+        // Check if direction change is pending
+        if (self->state_.doDirectionChange) {
+            self->state_.currentDirection = self->driver_.changeDirection();
+            self->state_.doDirectionChange = false;
+        }
+        
+        // Compute next pulse period based on current velocity
+        pulsePeriod_us = static_cast<float>(self->computeStepPeriodUs(self->state_.currentVelocity));
 
-            // Compute batch size for next callback.
-            // During acc/dec: batch = v/a steps (one velocity quantum).
-            // During const:   batch = remaining constant-phase steps (step mode)
-            //                        or a large value (velocity mode).
-            if (self->state_.state == State::Accelerating) {
-                stepsToDo = static_cast<uint32_t>(self->state_.currentVelocity / self->state_.acceleration);
+        // Compute batch size for next callback.
+        // During acc/dec: batch = v/a steps (one velocity quantum).
+        // During const:   batch = remaining constant-phase steps (step mode)
+        //                         or a large value (velocity mode).
+        if (self->state_.state == State::Accelerating) {
+            UQ20x12 steps = (self->state_.currentVelocity + self->state_.acceleration - 1.0f) / self->state_.acceleration;
+            stepsToDo = steps.getInteger();
+        }
+        else if (self->state_.state == State::Decelerating) {
+            UQ20x12 steps = (self->state_.currentVelocity + self->state_.deceleration - 1.0f) / self->state_.deceleration;
+            stepsToDo = steps.getInteger();
+        }
+        else if (self->state_.state == State::Running) {
+            if (self->state_.stepsTotal > 0) {
+                // Step mode: next batch covers remaining constant-velocity steps
+                uint64_t constEnd = self->state_.stepsAcc + self->state_.stepsConst;
+                uint64_t remaining = (self->state_.stepsDone < constEnd) ? (constEnd - self->state_.stepsDone) : 1;
+                stepsToDo = static_cast<uint32_t>((remaining > UINT32_MAX) ? UINT32_MAX : remaining);
+            } else {
+                // Velocity mode: no ramp needed, check infrequently
+                // (forceStepCallback() will override if user calls run() again)
+                stepsToDo = static_cast<uint32_t>((self->state_.currentVelocity + 999) / 1000);
             }
-            else if (self->state_.state == State::Decelerating) {
-                stepsToDo = static_cast<uint32_t>(self->state_.currentVelocity / self->state_.deceleration);
-            }
-            else if (self->state_.state == State::Running) {
-                if (self->state_.stepsTotal > 0) {
-                    // Step mode: next batch covers remaining constant-velocity steps
-                    uint64_t constEnd = self->state_.stepsAcc + self->state_.stepsConst;
-                    uint64_t remaining = (self->state_.stepsDone < constEnd) ? (constEnd - self->state_.stepsDone) : 1;
-                    stepsToDo = static_cast<uint32_t>((remaining > UINT32_MAX) ? UINT32_MAX : remaining);
-                    return;
-                } else {
-                    // Velocity mode: no ramp needed, check infrequently
-                    // (forceStepCallback() will override if user calls run() again)
-                    stepsToDo = static_cast<uint32_t>((self->state_.currentVelocity + 999) / 1000);
-                    return;
-                }
-            }
-
-            pulsePeriod_us = static_cast<float>(self->computeStepPeriodUs(self->state_.currentVelocity));
+        }
+        else if (self->state_.state == State::Stopped) {
+            stepsToDo = 0;
         }
         else {
-            self->driver_.stop();
-            stepsToDo = 0;
+            ESP_LOGW(log_tag, "Unexpected generator state: %d", static_cast<int>(self->state_.state));
         }
     }
 
