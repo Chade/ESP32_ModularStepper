@@ -55,7 +55,7 @@ namespace Stepper {
         };
 
         State getState() const {
-            return generator_.getState().state;
+            return generator_.getState().currentState;
         };
 
 

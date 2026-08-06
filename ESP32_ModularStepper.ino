@@ -38,17 +38,24 @@ void setup() {
       Serial.println("Encoder1: click");
   });
 */
+  //task.steps = 3200;
   task.steps = 0;
-  task.velocity = 100000.0f;
-  task.acceleration = 10000.0f;
-  task.deceleration = 10000.0f;
+  task.velocity = 100'000.0f;
+  task.acceleration = 1000.0f;
+  task.deceleration = 1000.0f;
   task.direction = Stepper::Direction::Clockwise;
 
   rotaryEncoder.setEncoderType( EncoderType::HAS_PULLUP );
 	rotaryEncoder.setBoundaries(0, 1'000'000, false);
-  rotaryEncoder.setStepValue(1000);
+  rotaryEncoder.setStepValue(100);
+  //rotaryEncoder.setEncoderValue(task.steps);
+  rotaryEncoder.setEncoderValue(task.velocity.getInteger());
 
   rotaryEncoder.onTurned([](long value) {
+    //Serial.print("Steps: ");
+    //Serial.println(value);
+    //task.steps = value;
+
     Serial.print("Velocity: ");
     Serial.println(value);
     task.velocity = value;
@@ -56,9 +63,17 @@ void setup() {
 
   rotaryEncoder.onPressed([](unsigned long duration) {
     Serial.println("Run task");
+    if (duration > 500) {
+      Serial.println("Change direction");
+      if (task.direction == Stepper::Direction::Clockwise)
+        task.direction = Stepper::Direction::Counterclockwise;
+      else
+        task.direction = Stepper::Direction::Clockwise;
+    }
     generator.run(task);
   });
   rotaryEncoder.begin();
+  driver.enable();
 
 }
 
