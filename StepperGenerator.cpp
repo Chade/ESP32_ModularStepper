@@ -28,10 +28,10 @@ namespace Stepper {
             ESP_LOGI(log_tag, "Starting driver");
             
             // Calc first step period
-            UQ20x12 stepPeriod_us = computeStepPeriodUs(state_.currentVelocity);
-            driver_.setPulsePeriodUs(static_cast<float>(stepPeriod_us));
+            driver_.reset(); // resets batch counters, first step triggers callback
+            driver_.setPulsePeriodUs(computeStepPeriodUs(state_.currentVelocity));
             driver_.setDirection(state_.targetDirection);
-            driver_.start(); // resets batch counters, first step triggers callback
+            driver_.start();
         }
         else if (state_.currentState == State::Stopped) {
             ESP_LOGI(log_tag, "Stopping driver");
@@ -88,7 +88,7 @@ namespace Stepper {
     /// Avoids the precision loss from computing the tiny dt = steps/velocity first.
     /// Mathematically: dv = acceleration * steps / velocity
     /// In raw representation: dv_raw = acceleration_raw * steps * Scale / velocity_raw
-    UQ20x12 Generator::computeDeltaV(UQ20x12 rate, uint32_t steps, UQ20x12 velocity, bool isDeceleration) {
+    UQ20x12 Generator::computeDeltaV(UQ20x12 rate, uint32_t steps, UQ20x12 velocity) {
         constexpr uint64_t scale = UQ20x12::Scale; // 2^12 = 4096
 
         uint64_t acc_raw = static_cast<uint64_t>(rate.getInternal());
@@ -128,33 +128,36 @@ namespace Stepper {
    /// Acceleration: dv = sqrt(v² + 2*a*s) - v
    /// Deceleration: dv = v - sqrt(max(0, v² - 2*d*s))
 
-    UQ20x12 Generator::computeVelocity(UQ20x12 acceleration, UQ20x12 velocity, uint32_t steps, bool isDeceleration) {
+    UQ20x12 Generator::computeVelocity(UQ20x12 acceleration, UQ20x12 currentVelocity, UQ20x12 targetVelocity, uint32_t steps) {
         constexpr uint64_t scale = UQ20x12::Scale; // 2^12 = 4096
         
         uint64_t acc_raw = static_cast<uint64_t>(acceleration.getInternal());
         if (acc_raw == 0 || steps == 0) {
-            return UQ20x12::fromInternal(0);
+            return currentVelocity;
         }
 
-        uint64_t vel_raw = static_cast<uint64_t>(velocity.getInternal());
+        uint64_t vel_raw = static_cast<uint64_t>(currentVelocity.getInternal());
         uint64_t two_a_s_scale = 2 * acc_raw * static_cast<uint64_t>(steps) * scale;
 
         uint64_t dv_raw = 0;
         uint64_t v_sq = vel_raw * vel_raw;
 
         uint64_t v_new_raw = 0;
-        if (!isDeceleration) {
+        if (currentVelocity < targetVelocity) {
             // Acceleration: v_new = sqrt(v² + 2*a*s)
             if (UINT64_MAX - v_sq < two_a_s_scale) {
                 return UQ20x12::fromInternal(isqrt64(UINT64_MAX));
             }
             v_new_raw = isqrt64(v_sq + two_a_s_scale);
-        } else {
+        } else if (currentVelocity > targetVelocity) {
             // Deceleration: v_new = sqrt(max(0, v² - 2*d*s))
             if (v_sq <= two_a_s_scale) {
                 return UQ20x12::fromInternal(0);
             }
             v_new_raw = isqrt64(v_sq - two_a_s_scale);
+        }
+        else {
+            return currentVelocity;
         }
 
         // Clamp to UQ20x12 range to prevent overflow on conversion back to 32-bit
@@ -174,11 +177,11 @@ namespace Stepper {
             return 0;
         }
 
-        // s = dv² / (2*a) = dv_raw² / (2 * Scale * a_raw)
-        return (dv_raw * dv_raw) / (2 * scale * acc_raw);
+        // s = dv² / (2*a) = dv_raw² / (2 * a_raw * scale)
+        return (dv_raw * dv_raw) / (2 * acc_raw * scale);
     }
 
-    UQ20x12 Generator::computeStepPeriodUs(UQ20x12 velocity) const {
+    float Generator::computeStepPeriodUs(UQ20x12 velocity) const {
         // Compute period from velocity
         if (velocity == 0.0) {
             return 0.0; // default 0 us when stopped
@@ -194,10 +197,140 @@ namespace Stepper {
         period_us = (period_us < minPeriod_us) ? minPeriod_us : period_us;
         period_us = (period_us > maxPeriod_us) ? maxPeriod_us : period_us;
 
-        return period_us;
+        return static_cast<float>(period_us);
     }
 
-        bool Generator::checkState(GeneratorState state) const {
+    void Generator::computeStepProfile(GeneratorState& state) {
+        uint64_t stepsAcc = 0;
+        // Check if we need to change direction
+        if (state.targetDirection != state.currentDirection) {
+            ESP_LOGI(log_tag, "Direction change required");
+            // We will need to decelerate first
+            state.currentState = State::Decelerating;
+            // Calc steps needed to accelerate back to target velocity after changing direction
+            stepsAcc = (state.acceleration > 0.0) ? computeRampSteps(state.targetVelocity, state.acceleration) : 0;
+        }
+        else {
+            // Calc steps needed to accelerate tor target velocity
+            if (state.targetVelocity == 0.0f && state.currentVelocity == 0.0f) {
+                state.currentState = State::Stopped;
+                // This should not happen, as we should not be running in step mode with zero velocity, but handle it gracefully
+            }
+            else if (state.targetVelocity > state.currentVelocity) {
+                state.currentState = State::Accelerating;
+                // Calc steps needed to accelerate to target velocity
+                UQ20x12 dv = state.targetVelocity - state.currentVelocity;
+                stepsAcc = (state.acceleration > 0.0) ? computeRampSteps(dv, state.acceleration) : 0;
+            }
+            else if (state.targetVelocity == state.currentVelocity) {
+                state.currentState = State::Running;
+                // No acceleration needed
+                stepsAcc = 0;
+            }
+            else if (state.targetVelocity < state.currentVelocity) {
+                state.currentState = State::Decelerating;
+                // Calc steps needed to decelerate to target velocity
+                UQ20x12 dv = state.currentVelocity - state.targetVelocity;
+                stepsAcc = (state.deceleration > 0.0) ? computeRampSteps(dv, state.deceleration) : 0;
+            }
+        }
+
+        // Calc steps needed to decelerate to stand-still at the end of the movement
+        uint64_t stepsDec = (state.deceleration > 0.0) ? computeRampSteps(state.targetVelocity, state.deceleration) : 0;
+
+        if (stepsAcc + stepsDec <= state.stepsTotal) {
+            ESP_LOGI(log_tag, "Calc trapezoid profile");
+            // Trapezoid profile: full acc + dec + const velocity
+            state.stepsAcc   = stepsAcc;
+            state.stepsDec   = stepsDec;
+            state.stepsConst = state.stepsTotal - (stepsAcc + stepsDec);
+        } else {
+            // Triangular profile: scale acc/dec phases to fit total steps
+            ESP_LOGI(log_tag, "Calc triangular profile");
+            if (stepsAcc > 0 && stepsDec == 0) {
+                state.stepsAcc = state.stepsTotal;
+                state.stepsDec = 0;
+                state.stepsConst = 0;
+            } else if (stepsAcc == 0 && stepsDec == 0) {
+                state.stepsAcc = 0;
+                state.stepsDec = 0;
+                state.stepsConst = state.stepsTotal;
+            } else if (stepsAcc == 0 && stepsDec > 0) {
+                state.stepsAcc = 0;
+                state.stepsDec = state.stepsTotal;
+                state.stepsConst = 0;
+            } else {
+                // First prio for decelerating to standstill after movement
+                if (state.stepsTotal >= stepsDec) {
+                    state.stepsAcc = state.stepsTotal - stepsDec;
+                    state.stepsDec = stepsDec;
+                    state.stepsConst = 0;
+                }
+                float ratioAcc = static_cast<float>(stepsAcc) / static_cast<float>(stepsAcc + stepsDec);
+                float ratioDec = static_cast<float>(stepsDec) / static_cast<float>(stepsAcc + stepsDec);
+
+                state.stepsAcc = state.stepsTotal * ratioAcc;
+                state.stepsDec = state.stepsTotal * ratioDec;
+                state.stepsConst = state.stepsTotal - (state.stepsAcc + state.stepsDec);
+            }
+            ESP_LOGI(log_tag, "Velocity profile: [%llu|%llu|%llu]", state.stepsAcc, state.stepsConst, state.stepsDec);
+            }
+    }
+
+    void Generator::computeStepProfile_v2(GeneratorState& state) {
+        constexpr uint64_t scale = UQ20x12::Scale; // 2^12 = 4096
+        uint64_t v_start_raw = static_cast<uint64_t>((state.currentDirection == state.targetDirection) ? state.currentVelocity.getInternal() : 0);
+        uint64_t v_max_raw = static_cast<uint64_t>(state.targetVelocity.getInternal());
+        uint64_t acc_raw = static_cast<uint64_t>(state.acceleration.getInternal());
+        uint64_t dec_raw = static_cast<uint64_t>(state.deceleration.getInternal());
+        uint64_t steps_total_raw = state.stepsTotal * scale;
+
+        uint64_t v_start_sq_raw = v_start_raw * v_start_raw;
+        uint64_t v_max_sq_raw = v_max_raw * v_max_raw;
+
+        // TODO: Catch acc und dec equals zero
+
+        // Calc steps for acceleration
+        uint64_t v_end_raw = dec_raw * steps_total_raw;
+        uint64_t half_v_start_sq_raw = v_start_sq_raw / 2;
+        
+        if (v_end_raw < half_v_start_sq_raw) {
+            // Even with full deceleration the velocity will not be reduced to zero 
+            UQ20x12 v_remaining = UQ20x12::fromInternal(isqrt64(v_start_sq_raw - (2 * v_end_raw)));
+            ESP_LOGW(log_tag, "Steps not sufficient to decelerate to standstill. Remaining velocity: %.2f steps/s", static_cast<float>(v_remaining));
+            state.stepsAcc = 0;
+            state.stepsDec = state.stepsTotal;
+            state.stepsConst = 0;
+            return;
+        }
+
+        uint64_t steps_peak_raw = (v_end_raw - half_v_start_sq_raw) / (acc_raw + dec_raw);
+
+        // Calc peak velocity
+        //uint64_t v_peak_sq_raw = v_start_sq_raw + 2 * acc_raw * steps_peak_raw;
+        uint64_t v_peak_sq_raw = 2 * dec_raw * (steps_total_raw - steps_peak_raw);
+
+        
+        if (v_peak_sq_raw <= v_max_sq_raw) {
+            // Triangular profile, target velocity will not be reached
+            state.stepsAcc = steps_peak_raw / scale;
+            state.stepsDec = state.stepsTotal - state.stepsAcc;
+            state.stepsConst = 0;
+            state.targetVelocity = isqrt64(v_peak_sq_raw) / scale;
+        } else {
+            // Trapezoid profile
+            if (v_start_raw < v_max_raw) {
+                state.stepsAcc = (v_max_sq_raw - 2 * v_max_raw * v_start_raw + v_start_sq_raw) / (2 * acc_raw * scale);
+            }
+            else {
+                state.stepsAcc = (v_max_sq_raw - 2 * v_max_raw * v_start_raw + v_start_sq_raw) / (2 * dec_raw * scale);
+            }
+            state.stepsDec = v_max_sq_raw / (2 * dec_raw * scale);
+            state.stepsConst = state.stepsTotal - state.stepsAcc - state.stepsDec;
+        }
+    }
+
+    bool Generator::checkState(GeneratorState state) const {
         bool ret = true;
         if (state.targetVelocity < 0.0f) {
             ESP_LOGW(log_tag, "Generator state invalid: targetVelocity needs to be positive");
@@ -214,7 +347,7 @@ namespace Stepper {
                 ESP_LOGW(log_tag, "Generator state invalid: targetVelocity > 0 but targetDirection == Neutral");
                 ret = false;
             }
-            if (!driver_.checkPulsePeriod(static_cast<float>(computeStepPeriodUs(state.targetVelocity)))) {
+            if (!driver_.checkPulsePeriod(computeStepPeriodUs(state.targetVelocity))) {
                 ESP_LOGW(log_tag, "Generator state invalid: targetVelocity results in invalid pulse period");
                 ret = false;
             }
@@ -223,7 +356,7 @@ namespace Stepper {
         return ret;
     }
 
-    void Generator::initializeStateBeforeStep(const GeneratorTask& task, GeneratorState& state) {
+    void Generator::initializeStateBeforeStep(const GeneratorTask& task, GeneratorState& state) const {
         state.targetVelocity  = task.velocity;
         state.acceleration    = task.acceleration;
         state.deceleration    = task.deceleration;
@@ -233,7 +366,7 @@ namespace Stepper {
         // Check if we are starting from stand-still
         if (state.currentVelocity == 0.0f) {
             ESP_LOGI(log_tag, "Starting from stand-still");
-            state_.currentDirection = state_.targetDirection;
+            state.currentDirection = state.targetDirection;
             state.previousState = State::Stopped;
         }
         else {
@@ -245,142 +378,72 @@ namespace Stepper {
         if (state.stepsTotal > 0) {
             ESP_LOGI(log_tag, "Running in step mode");
             state.stepsDone = 0;
-            
-            uint64_t stepsAcc = 0;
-            // Check if we need to change direction
-            if (state.targetDirection != state.currentDirection) {
-                ESP_LOGI(log_tag, "Direction change required");
-                // We will need to decelerate first, but the steps needed will be added to the stepsAcc
-                state.currentState = State::Decelerating;
-                // Calc steps needed to decelerate to stand-still before changing direction
-                stepsAcc = (state.deceleration > 0.0) ? computeRampSteps(state.currentVelocity, state.deceleration) : 0;
-                // Calc steps needed to accelerate back to target velocity after changing direction
-                stepsAcc += (state.acceleration > 0.0) ? computeRampSteps(state.targetVelocity, state.acceleration) : 0;
-            }
-            else {
-                // Calc steps needed to accelerate tor target velocity
-                if (state.targetVelocity == 0.0f && state.currentVelocity == 0.0f) {
-                    state.currentState = State::Stopped;
-                    // This should not happen, as we should not be running in step mode with zero velocity, but handle it gracefully
-                }
-                else if (state.targetVelocity > state.currentVelocity) {
-                    state.currentState = State::Accelerating;
-                    // Calc steps needed to accelerate to target velocity
-                    UQ20x12 dv = state.targetVelocity - state.currentVelocity;
-                    stepsAcc = (state.acceleration > 0.0) ? computeRampSteps(dv, state.acceleration) : 0;
-                }
-                else if (state.targetVelocity == state.currentVelocity) {
-                    state.currentState = State::Running;
-                    // No acceleration needed
-                    stepsAcc = 0;
-                }
-                else if (state.targetVelocity < state.currentVelocity) {
-                    state.currentState = State::Decelerating;
-                    // Calc steps needed to decelerate to target velocity
-                    UQ20x12 dv = state.currentVelocity - state.targetVelocity;
-                    stepsAcc = (state.deceleration > 0.0) ? computeRampSteps(dv, state.deceleration) : 0;
-                }
-            }
-
-            // Calc steps needed to decelerate to stand-still at the end of the movement
-            uint64_t stepsDec = (state.deceleration > 0.0) ? computeRampSteps(state.targetVelocity, state.deceleration) : 0;
-
-            if (stepsAcc + stepsDec <= state.stepsTotal) {
-                ESP_LOGI(log_tag, "Calc trapezoid profile");
-                // Trapezoid profile: full acc + dec + const velocity
-                state.stepsAcc   = stepsAcc;
-                state.stepsDec   = stepsDec;
-                state.stepsConst = state.stepsTotal - (stepsAcc + stepsDec);
-            } else {
-                // Triangular profile: scale acc/dec phases to fit total steps
-                ESP_LOGI(log_tag, "Calc triangular profile");
-                if (stepsAcc > 0 && stepsDec == 0) {
-                    state.stepsAcc = state.stepsTotal;
-                    state.stepsDec = 0;
-                    state.stepsConst = 0;
-                } else if (stepsAcc == 0 && stepsDec == 0) {
-                    state.stepsAcc = 0;
-                    state.stepsDec = 0;
-                    state.stepsConst = state.stepsTotal;
-                } else if (stepsAcc == 0 && stepsDec > 0) {
-                    state.stepsAcc = 0;
-                    state.stepsDec = state.stepsTotal;
-                    state.stepsConst = 0;
-                } else {
-                    float ratioAcc = static_cast<float>(stepsAcc) / static_cast<float>(stepsAcc + stepsDec);
-                    float ratioDec = static_cast<float>(stepsDec) / static_cast<float>(stepsAcc + stepsDec);
-
-                    state.stepsAcc = state.stepsTotal * ratioAcc;
-                    state.stepsDec = state.stepsTotal * ratioDec;
-                    state.stepsConst = state.stepsTotal - (state.stepsAcc + state.stepsDec);
-                }
-            }
+            computeStepProfile_v2(state);
         }
         else {
             ESP_LOGI(log_tag, "Running in constant velocity mode");
-            if (state.targetVelocity == 0.0f && state.currentVelocity == 0.0f) {
-                state.currentState = State::Stopped;
-            } else if (state.targetVelocity > state.currentVelocity) {
-                state.currentState = State::Accelerating;
-            } else if (state.targetVelocity < state.currentVelocity) {
-                state.currentState = State::Decelerating;
-            } else {
-                state.currentState = State::Running;
-            }
         }
 
-        // Preseed velocity if starting from stand-still
-        if (state.currentVelocity == 0.0f && state.targetVelocity > 0) {
-            state_.currentVelocity = minVelocity_;
+        // Set state
+        if (state.targetDirection != state.currentDirection) {
+            ESP_LOGI(log_tag, "Direction change required");
+            state.currentState = State::Decelerating;
         }
+        else if (state.targetVelocity == 0.0f && state.currentVelocity == 0.0f) {
+            state.currentState = State::Stopped;
+        }
+        else if (state.targetVelocity > 0.0f && state.currentVelocity == 0.0f) {
+            state.currentState = State::Accelerating;
+            state.currentVelocity = computeVelocity(state.acceleration, state.currentVelocity, state.targetVelocity, 1); // Preseed velocity if starting from stand-still
+        }
+        else if (state.targetVelocity > state.currentVelocity) {
+            state.currentState = State::Accelerating;
+        }
+        else if (state.targetVelocity < state.currentVelocity) {
+            state.currentState = State::Decelerating;
+        }
+        else {
+            state.currentState = State::Running;
+        }
+
     }
 
-    void Generator::advanceStateAfterStep(uint32_t steps, GeneratorState& state) {
-        // NOTE: We do NOT compute dt = steps / velocity as an intermediate.
-        // At 200k steps/s, dt would be ~5µs = 0.02 LSBs in UQ20x12, truncating to zero.
-        // Instead, we compute dv = rate * steps / velocity directly via computeDeltaV(),
-        // which uses 64-bit intermediates to preserve precision.
-
-        if (state.stepsTotal > 0) {
-            state.stepsDone += steps;
-            // Determine phase by stepsDone
-            if (state.stepsDone < state.stepsAcc) {
-                // Accelerating
-            } else if (state.stepsDone < (state.stepsAcc + state.stepsConst)) {
-                // Constant
-                // TODO: Check if target velocity was reached
-                state.currentVelocity = state.targetVelocity;
-            } else if (state.stepsDone < (state.stepsAcc + state.stepsConst + state.stepsDec)) {
-                // Decelerating
-                state.targetVelocity = 0.0f;
-            } else if (state.stepsDone >= state.stepsTotal) {
-                ESP_LOGI(log_tag, "Target steps reached (%llu/%llu/%lu)", state.stepsDone, state.stepsTotal, steps);
-                // TODO: Check if target velocity was reached
-                state.targetVelocity = 0.0f;
-                state.currentVelocity = 0.0f;
-            }
-        }
+    void Generator::advanceStateAfterStep(uint32_t steps, GeneratorState& state) const {
+        UQ20x12 lastVelocity = state.currentVelocity;
 
         if (state.currentDirection == Direction::Neutral || state.targetDirection == Direction::Neutral) {
             ESP_LOGI(log_tag, "Driver switched into neutral (disabled)");
             state.targetVelocity = 0.0f;
             state.currentVelocity = 0.0f;
         }
-        
+
+        if (state.stepsTotal > 0) {
+            if (state.currentDirection == state.targetDirection) {
+                state.stepsDone += steps;
+                // Determine phase by stepsDone
+                if (state.stepsDone < state.stepsAcc) {
+                    // Accelerating
+                }
+                else if (state.stepsDone <= (state.stepsAcc + state.stepsConst)) {
+                    // Constant
+                    state.currentVelocity = state.targetVelocity;
+                } else if (state.stepsDone < (state.stepsAcc + state.stepsConst + state.stepsDec)) {
+                    // Decelerating
+                    state.targetVelocity = 0.0f;
+                } else if (state.stepsDone >= state.stepsTotal) {
+                    // Stopping
+                    ESP_LOGI(log_tag, "Target steps reached [%llu/%llu/%lu]", state.stepsDone, state.stepsTotal, steps);
+                    state.targetVelocity = 0.0f;
+                    state.currentVelocity = 0.0f;
+                }
+            }
+        }
+
         if (state.currentDirection != state.targetDirection) {
             // Need to change direction: decelerate to stand-still first
             if (state.currentVelocity > 0.0f) {
                 state.updateState(State::Decelerating);
-
-                /*UQ20x12 dv = computeDeltaV(state.deceleration, steps, state.currentVelocity, true);
-                if (dv >= state.currentVelocity) {
-                    state.currentVelocity = 0.0f;
-                }
-                else {
-                    state.currentVelocity = state.currentVelocity - dv;
-                }*/
-
-                state.currentVelocity = computeVelocity(state.deceleration, state.currentVelocity, steps, true);
+                state.currentVelocity = computeVelocity(state.deceleration, state.currentVelocity, state.targetVelocity, steps);
             }
             if (state.currentVelocity == 0.0f) {
                 ESP_LOGI(log_tag, "Do direction change");
@@ -395,27 +458,12 @@ namespace Stepper {
             // Accelerate towards target velocity
             if (state.currentVelocity < state.targetVelocity) {
                 state.updateState(State::Accelerating);
-
-                /*UQ20x12 dv = computeDeltaV(state.acceleration, steps, state.currentVelocity, false);
-                if (dv >= (state.targetVelocity - state.currentVelocity)) {
-                    state.currentVelocity = state.targetVelocity;
-                }
-                else {
-                    state.currentVelocity = state.currentVelocity + dv;
-                }*/
-               state.currentVelocity = computeVelocity(state.acceleration, state.currentVelocity, steps, false);
+                state.currentVelocity = computeVelocity(state.acceleration, state.currentVelocity, state.targetVelocity, steps);
             }
             // Decelerate towards target velocity
             else if (state.currentVelocity > state.targetVelocity) {
                 state.updateState(State::Decelerating);
-                
-                /*UQ20x12 dv = computeDeltaV(state.deceleration, steps, state.currentVelocity, true);
-                if (dv >= (state.currentVelocity - state.targetVelocity)) {
-                    state.currentVelocity = state.targetVelocity;
-                } else {
-                    state.currentVelocity = state.currentVelocity - dv;
-                }*/
-               state.currentVelocity = computeVelocity(state.deceleration, state.currentVelocity, steps, true);
+                state.currentVelocity = computeVelocity(state.deceleration, state.currentVelocity, state.targetVelocity, steps);
             }
             // System reached target velocity
             else if (state.currentVelocity == state.targetVelocity) {
@@ -424,121 +472,62 @@ namespace Stepper {
 
             // Check if system has reached standstill
             if (state.currentVelocity == 0.0f && state.targetVelocity == 0.0f) {
-                ESP_LOGI(log_tag, "Standstill reached (%llu/%llu/%lu)", state.stepsDone, state.stepsTotal, steps);
-                state.updateState(State::Stopped);
-            }
-        }
-
-        // Velocity mode
-        /*if (state.stepsTotal == 0) {
-            if (state.targetVelocity == 0.0) {
-                // Decelerate to stop
-                if (state.currentVelocity > 0.0) {
-                    state.currentState = State::Decelerating;
-
-                    UQ20x12 dv = computeDeltaV(state.deceleration, steps, state.currentVelocity, true);
-                    if (dv >= state.currentVelocity) {
-                        state.currentVelocity = 0.0;
-                    }
-                    else {
-                        state.currentVelocity = state.currentVelocity - dv;
-                    }
-                }
-                if (state.currentVelocity == 0.0) {
-                    state.currentState = State::Stopped;
-                    return false;
-                }
-            } else {
-                if (state.currentDirection != state.targetDirection) {
-                    // Need to change direction: decelerate to stand-still first
-                    if (state.currentVelocity > 0.0) {
-                        state.currentState = State::Decelerating;
-
-                        UQ20x12 dv = computeDeltaV(state.deceleration, steps, state.currentVelocity, true);
-                        if (dv >= state.currentVelocity) {
-                            state.currentVelocity = 0.0;
-                        }
-                        else {
-                            state.currentVelocity = state.currentVelocity - dv;
-                        }
-                    }
-                    if (state.currentVelocity == 0.0) {
-                        // Reached stand-still, change direction
-                        // We will not transition to State:Stopped, to indicate the movement is not finished yet
-                        state.currentState = State::Running;
-                        state.doDirectionChange = true;
-                        state.currentVelocity = minVelocity_;
-                    }
+                if (state.stepsTotal > 0 && state.stepsDone < state.stepsTotal) {
+                    ESP_LOGI(log_tag, "Current velocity: 0 steps/s but still %llu steps to go", (state.stepsTotal - state.stepsDone));
+                    state.currentVelocity = lastVelocity;
                 }
                 else {
-                    // Move towards target velocity
-                    if (state.currentVelocity < state.targetVelocity) {
-                        state.currentState = State::Accelerating;
-
-                        UQ20x12 dv = computeDeltaV(state.acceleration, steps, state.currentVelocity, false);
-                        state.currentVelocity = state.currentVelocity + dv;
-                        if (state.currentVelocity > state.targetVelocity) {
-                            state.currentVelocity = state.targetVelocity;
-                        }
-                    }
-                    else if (state.currentVelocity > state.targetVelocity) {
-                        state.currentState = State::Decelerating;
-
-                        UQ20x12 dv = computeDeltaV(state.deceleration, steps, state.currentVelocity, true);
-                        if (dv >= state.currentVelocity) {
-                            state.currentVelocity = state.targetVelocity;
-                        } else {
-                            state.currentVelocity = state.currentVelocity - dv;
-                            if (state.currentVelocity < state.targetVelocity) {
-                                state.currentVelocity = state.targetVelocity;
-                            }
-                        }
-                    }
-                    else {
-                        state.currentState = State::Running;
-                    }
+                    ESP_LOGI(log_tag, "Standstill reached (%llu/%llu/%lu)", state.stepsDone, state.stepsTotal, steps);
+                    state.updateState(State::Stopped);
                 }
             }
         }
-        // Step mode
-        else {
-            state.stepsDone += steps;
-            // Determine phase by stepsDone
-            if (state.stepsDone <= state.stepsAcc) {
-                // Accelerating
-                state.currentState = State::Accelerating;
-
-                UQ20x12 dv = computeDeltaV(state.acceleration, steps, state.currentVelocity, false);
-                state.currentVelocity = state.currentVelocity + dv;
-                if (state.currentVelocity > state.targetVelocity) {
-                    state.currentVelocity = state.targetVelocity;
-                }
-            } else if (state.stepsDone <= (state.stepsAcc + state.stepsConst)) {
-                // Constant
-                state.currentState = State::Running;
-
-                state.currentVelocity = state.targetVelocity;
-            } else if (state.stepsDone <= (state.stepsAcc + state.stepsConst + state.stepsDec)) {
-                // Decelerating
-                state.currentState = State::Decelerating;
-
-                UQ20x12 dv = computeDeltaV(state.deceleration, steps, state.currentVelocity, true);
-                if (dv >= state.currentVelocity) {
-                    state.currentVelocity = 0.0;
-                } else {
-                    state.currentVelocity = state.currentVelocity - dv;
-                }
-            }
-
-            if (state.stepsDone >= state.stepsTotal) {
-                state.currentState = State::Stopped;
-                return false;
-            }
-        }
-        return true;*/
     }
 
-    void Generator::callbackOnStepDone(uint32_t stepsDone, uint32_t& stepsToDo, float& pulsePeriod_us, void* user_ctx) {
+   uint32_t Generator::computeStepBatchSize(const GeneratorState& state) const {
+        // Compute batch size for next callback.
+        // During acc/dec: batch = v/a steps (one velocity quantum).
+        // During const:   batch = remaining constant-phase steps (step mode)
+        //                         or a large value (velocity mode).
+        uint32_t stepsToDo = 0;
+        
+        if (state.currentState == State::Accelerating) {
+            UQ20x12 steps = (state.currentVelocity + state.acceleration ) / state.acceleration;
+            stepsToDo = steps.getInteger();
+            if (state.stepsTotal > 0) {
+                uint64_t stepsMax = state.stepsAcc;
+                uint64_t stepsRemaining = (state.stepsDone < stepsMax) ? (stepsMax - state.stepsDone) : 1;
+                stepsToDo = std::min(stepsToDo, static_cast<uint32_t>((stepsRemaining > UINT32_MAX) ? UINT32_MAX : stepsRemaining));
+            }
+        }
+        else if (state.currentState == State::Running) {
+            UQ20x12 steps = (state.currentVelocity + 1000) / 1000;
+            stepsToDo = steps.getInteger();
+            if (state.stepsTotal > 0) {
+                uint64_t stepsMax = state.stepsAcc + state.stepsConst;
+                uint64_t stepsRemaining = (state.stepsDone < stepsMax) ? (stepsMax - state.stepsDone) : 1;
+                stepsToDo = std::min(stepsToDo, static_cast<uint32_t>((stepsRemaining > UINT32_MAX) ? UINT32_MAX : stepsRemaining));
+            }
+        }
+        else if (state.currentState == State::Decelerating) {
+            UQ20x12 steps = (state.currentVelocity + state.deceleration) / state.deceleration;
+            stepsToDo = steps.getInteger();
+            if (state.stepsTotal > 0) {
+                uint64_t stepsMax = state.stepsAcc + state.stepsConst + state.stepsDec;
+                uint64_t stepsRemaining = (state.stepsDone < stepsMax) ? (stepsMax - state.stepsDone) : 1;
+                stepsToDo = std::min(stepsToDo, static_cast<uint32_t>((stepsRemaining > UINT32_MAX) ? UINT32_MAX : stepsRemaining));
+            }
+        }
+        else if (state.currentState == State::Stopped) {
+            stepsToDo = 0;
+        }
+        else {
+            ESP_LOGW(log_tag, "Unexpected generator state: %d", static_cast<int>(state.currentState));
+        }
+        return stepsToDo;
+   }
+
+    void Generator::callbackOnStepDone(uint32_t stepsDone, uint32_t& stepsToDo, float& pulsePeriod_us, float& pulsePeriodIncrement_us, void* user_ctx) {
         Generator* self = static_cast<Generator*>(user_ctx);
 
         // The driver only calls us when the batch threshold is reached.
@@ -552,49 +541,10 @@ namespace Stepper {
         }
         
         // Compute next pulse period based on current velocity
-        pulsePeriod_us = static_cast<float>(self->computeStepPeriodUs(self->state_.currentVelocity));
+        pulsePeriod_us = self->computeStepPeriodUs(self->state_.currentVelocity);
 
-        // Compute batch size for next callback.
-        // During acc/dec: batch = v/a steps (one velocity quantum).
-        // During const:   batch = remaining constant-phase steps (step mode)
-        //                         or a large value (velocity mode).
-        if (self->state_.currentState == State::Accelerating) {
-            UQ20x12 steps = (self->state_.currentVelocity + self->state_.acceleration ) / self->state_.acceleration;
-            // TODO: Check if steps is less or equal remaining steps in step mode
-            stepsToDo = steps.getInteger();
-            if (stepsToDo == 0) {
-                ESP_LOGW(log_tag, "Unexpectedly no more steps to do during acceleration phase (%llu/%llu)", self->state_.stepsDone, self->state_.stepsTotal);
-            }
-        }
-        else if (self->state_.currentState == State::Decelerating) {
-            UQ20x12 steps = (self->state_.currentVelocity + self->state_.deceleration) / self->state_.deceleration;
-            stepsToDo = steps.getInteger();
-
-            if (stepsToDo == 0) {
-                ESP_LOGW(log_tag, "Unexpectedly no more steps to do during deceleration phase (%llu/%llu)", self->state_.stepsDone, self->state_.stepsTotal);
-            }
-        }
-        else if (self->state_.currentState == State::Running) {
-            if (self->state_.stepsTotal > 0) {
-                // Step mode: next batch covers remaining constant-velocity steps
-                uint64_t constEnd = self->state_.stepsAcc + self->state_.stepsConst;
-                uint64_t remaining = (self->state_.stepsDone < constEnd) ? (constEnd - self->state_.stepsDone) : 1;
-                stepsToDo = static_cast<uint32_t>((remaining > UINT32_MAX) ? UINT32_MAX : remaining);
-            } else {
-                // Velocity mode: no ramp needed, check infrequently
-                // (forceStepCallback() will override if user calls run() again)
-                stepsToDo = static_cast<uint32_t>((self->state_.currentVelocity + 1000) / 1000);
-            }
-            if (stepsToDo == 0) {
-                ESP_LOGW(log_tag, "Unexpectedly no more steps to do during run phase (%llu/%llu)", self->state_.stepsDone, self->state_.stepsTotal);
-            }
-        }
-        else if (self->state_.currentState == State::Stopped) {
-            stepsToDo = 0;
-        }
-        else {
-            ESP_LOGW(log_tag, "Unexpected generator state: %d", static_cast<int>(self->state_.currentState));
-        }
+        // Compute next step batch size
+        stepsToDo = self->computeStepBatchSize(self->state_);
     }
 
 

@@ -41,42 +41,40 @@ namespace Stepper
         EmergencyStop = 224
     };
 
-    // Fast integer square root for 64-bit values (up to 44 bits input range)                                                                                       
-    inline uint64_t isqrt64(uint64_t val) {                                                                                                                            
-        uint64_t root = 0;                                                                                                                                           
-        // For UQ20x12 shifted by 12 bits, max shifted value is 44 bits.                                                                                             
-        // 1ULL << 44 is the highest power-of-4 bit position needed.                                                                                                 
-        uint64_t bit = 1ULL << 62;                                                                                                                                   
-                                                                                                                                                                     
-        while (bit > val) {                                                                                                                                            
-            bit >>= 2;                                                                                                                                               
-        }                                                                                                                                                            
-                                                                                                                                                                     
-        while (bit != 0) {                                                                                                                                           
-            if (val >= root + bit) {                                                                                                                                   
-                val -= root + bit;                                                                                                                                     
-                root = (root >> 1) + bit;                                                                                                                            
-            } else {                                                                                                                                                 
-                root >>= 1;                                                                                                                                          
-            }                                                                                                                                                        
-            bit >>= 2;                                                                                                                                               
-        }                                                                                                                                                            
-                                                                                                                                                                     
-        return root;                                                                                                                          
+    // Fast integer square root for 64-bit values (floor(sqrt(val)))
+    inline uint64_t isqrt64(uint64_t val) {
+        if (val == 0) return 0;
+
+        // Skip leading zero-pair iterations using Count Leading Zeros
+        int shift = (63 - __builtin_clzll(val)) & ~1;
+        uint64_t bit = 1ULL << shift;
+        uint64_t root = 0;
+
+        while (bit != 0) {
+            if (val >= root + bit) {
+                val -= root + bit;
+                root = (root >> 1) + bit;
+            } else {
+                root >>= 1;
+            }
+            bit >>= 2;
+        }
+
+        return root;
     }
 
-    // Computes the square root of a UQ20x12 fixed-point value cleanly                                                                                              
-    inline UQ20x12 sqrt(UQ20x12 val) {     
-        constexpr uint64_t scale = UQ20x12::Scale; // 2^12 = 4096                                                                                                                          
+    // Computes the square root of a UQ20x12 fixed-point value cleanly
+    inline UQ20x12 sqrt(UQ20x12 val) {
+        constexpr uint64_t scale = UQ20x12::Scale; // 2^12 = 4096
         uint64_t val_raw = static_cast<uint64_t>(val.getInternal());
 
         if (val_raw == 0) {
             return UQ20x12::fromInternal(0);
-        }                                                                                                                                                                                                                     
-                                                                                                        
-        uint64_t root_raw = isqrt64(val_raw * scale);                                                                                                                        
-                                                                                                                   
-        return UQ20x12::fromInternal(root_raw);                                                                                                                      
+        }
+
+        uint64_t root_raw = isqrt64(val_raw * scale);
+
+        return UQ20x12::fromInternal(root_raw);
     }
 }
 

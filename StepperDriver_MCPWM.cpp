@@ -21,7 +21,7 @@ namespace Stepper {
 
     }
 
-    void DriverMCPWM::update(uint32_t stepsDone, uint32_t stepsToDo, float pulsePeriodNew_us) {
+    void DriverMCPWM::update(uint32_t stepsDone, uint32_t stepsToDo, float pulsePeriodNew_us, float pulsePeriodIncrement_us) {
         ESP_ERROR_CHECK(mcpwm_timer_set_period(stepTimerHandle_, timerTicksFromUs(pulsePeriodNew_us)));
     }
 
@@ -29,7 +29,7 @@ namespace Stepper {
         DriverMCPWM* self = static_cast<DriverMCPWM*>(user_ctx);
         
         BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-        self->doStepFromISR(&xHigherPriorityTaskWoken);
+        self->notifyStepDoneFromISR(&xHigherPriorityTaskWoken);
         return xHigherPriorityTaskWoken;
     }
 
@@ -117,7 +117,6 @@ namespace Stepper {
     }
 
     void DriverMCPWM::start() {
-        reset();
         ESP_ERROR_CHECK(mcpwm_timer_set_period(stepTimerHandle_, timerTicksFromUs(pulsePeriod_us_)));
         ESP_ERROR_CHECK(mcpwm_timer_start_stop(stepTimerHandle_, MCPWM_TIMER_START_NO_STOP));
         mcpwmTimerRunning_ = true;
@@ -125,7 +124,6 @@ namespace Stepper {
     }
 
     void DriverMCPWM::startOnce() {
-        reset();
         ESP_ERROR_CHECK(mcpwm_timer_set_period(stepTimerHandle_, timerTicksFromUs(pulsePeriod_us_)));
         ESP_ERROR_CHECK(mcpwm_timer_start_stop(stepTimerHandle_, MCPWM_TIMER_START_STOP_FULL));
         //ESP_ERROR_CHECK(mcpwm_timer_start_stop(stepTimerHandle_, MCPWM_TIMER_START_STOP_EMPTY));

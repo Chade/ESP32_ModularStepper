@@ -65,10 +65,11 @@ namespace Stepper {
 
                 // Execute callback
                 uint32_t stepsToDo = 0;
-                self->callbackOnStepDone_(stepsDone, stepsToDo, self->pulsePeriod_us_, self->callbackOnStepDoneUserCtx_);
+                float pulsePeriodIncrement_us = 0.0f;
+                self->callbackOnStepDone_(stepsDone, stepsToDo, self->pulsePeriod_us_, pulsePeriodIncrement_us, self->callbackOnStepDoneUserCtx_);
                 if (stepsToDo > 0) {
                     self->isrStepThreshold_ = stepsToDo;
-                    self->update(stepsDone, stepsToDo, self->pulsePeriod_us_);
+                    self->update(stepsDone, stepsToDo, self->pulsePeriod_us_, pulsePeriodIncrement_us);
                 }
                 else {
                     self->forceStepCallback();
@@ -93,20 +94,22 @@ namespace Stepper {
         return pinEnable_.isEnabled();
     }
 
-    void DriverBase::reset(bool resetSteps, bool resetStepsMissed) {
+    void DriverBase::reset(bool resetSteps) {
+        if (isRunning()) {
+            stop();
+        }
+
         isrStepCount_ = 0;
         isrStepThreshold_ = 0;
+        pulsePeriod_us_ = 0.0f;
 
         if (resetSteps) {
             numStepsDone_ = 0;
         }
-        if (resetStepsMissed) {
-            numStepsMissed_ = 0;
-        }
     }
   
 
-    bool DriverBase::doStep(bool immidiately) {
+    bool DriverBase::notifyStepDone(bool immidiately) {
         if (taskHandle_ != nullptr)
         {
             portENTER_CRITICAL(&stepCountMux_);
@@ -127,7 +130,7 @@ namespace Stepper {
         return false;
     }
 
-    bool IRAM_ATTR DriverBase::doStepFromISR(BaseType_t* pxHigherPriorityTaskWoken, bool immidiately) {
+    bool IRAM_ATTR DriverBase::notifyStepDoneFromISR(BaseType_t* pxHigherPriorityTaskWoken, bool immidiately) {
         if (taskHandle_ != nullptr)
         {
             portENTER_CRITICAL(&stepCountMux_);
@@ -206,22 +209,6 @@ namespace Stepper {
         }
     }
 
-    Direction DriverBase::changeDirection()
-    {
-        if (!isEnabled()) {
-            return Direction::Neutral;
-        }
-
-        bool newDirection = pinDirection_.toggle();
-
-        if (newDirection) {
-            return Direction::Counterclockwise;
-        }
-        else {
-            return Direction::Clockwise;
-        }
-    }
-
     Direction DriverBase::getDirection() const
     {
         if (!isEnabled()) {
@@ -234,6 +221,23 @@ namespace Stepper {
         else {
             return Direction::Clockwise;
         }
+    }
+
+    Direction DriverBase::changeDirection()
+    {
+        if (!isEnabled()) {
+            return Direction::Neutral;
+        }
+
+        if (getDirection() == Direction::Clockwise) {
+            setDirection(Direction::Counterclockwise);
+            return Direction::Counterclockwise;
+        }
+        else if (getDirection() == Direction::Counterclockwise) {
+            setDirection(Direction::Clockwise);
+            return Direction::Clockwise;
+        }
+        return Direction::Neutral;
     }
 
     void DriverBase::setTiming(float minPulseWidthHigh_us, float minPulseWidthLow_us, float directionDelay_us, float enableDelay_us)
@@ -293,16 +297,12 @@ namespace Stepper {
         return numStepsDone_;
     }
 
+    uint64_t DriverBase::getStepsFast() const {
+        return numStepsDone_ + isrStepCount_;
+    }
+
     void DriverBase::resetSteps(uint64_t count) {
         numStepsDone_ = count;
-    }
-
-    uint64_t DriverBase::getStepsMissed() const {
-        return numStepsMissed_;
-    }
-
-    void DriverBase::resetStepsMissed(uint64_t count) {
-        numStepsMissed_ = count;
     }
 
     void DriverBase::registerCallbackOnStepDone(DriverCallback callback, void* user_ctx) {

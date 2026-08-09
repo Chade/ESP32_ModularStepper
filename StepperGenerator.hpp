@@ -118,17 +118,21 @@ namespace Stepper
         void advanceStateAfterStep(uint32_t steps) {
             advanceStateAfterStep(steps, state_);
         };
-
+        
+        static void computeStepProfile(GeneratorState& state);
+        static void computeStepProfile_v2(GeneratorState& state);
+        
     private:
-        void initializeStateBeforeStep(const GeneratorTask&, GeneratorState& state);
-        void advanceStateAfterStep(uint32_t steps, GeneratorState& state);
-
-        UQ20x12 computeStepPeriodUs(UQ20x12 velocity) const;
-        static UQ20x12 computeDeltaV(UQ20x12 acceleration, uint32_t steps, UQ20x12 velocity, bool isDeceleration = false);
-        static UQ20x12 computeVelocity(UQ20x12 acceleration, UQ20x12 velocity, uint32_t steps, bool isDeceleration);
+        void initializeStateBeforeStep(const GeneratorTask&, GeneratorState& state) const;
+        void advanceStateAfterStep(uint32_t steps, GeneratorState& state) const;
+        uint32_t computeStepBatchSize(const GeneratorState& state) const;
+        float computeStepPeriodUs(UQ20x12 velocity) const;
+        
+        static UQ20x12 computeDeltaV(UQ20x12 acceleration, uint32_t steps, UQ20x12 velocity);
+        static UQ20x12 computeVelocity(UQ20x12 acceleration, UQ20x12 currentVelocity, UQ20x12 targetVelocity, uint32_t steps);
         static uint64_t computeRampSteps(UQ20x12 dv, UQ20x12 acceleration);
 
-        static void callbackOnStepDone(uint32_t stepsDone, uint32_t& stepsToDo, float& pulsePeriod_us, void* user_ctx);
+        static void callbackOnStepDone(uint32_t stepsDone, uint32_t& stepsToDo, float& pulsePeriod_us, float& pulsePeriodIncrement_us, void* user_ctx);
 
         DriverBase& driver_;
 

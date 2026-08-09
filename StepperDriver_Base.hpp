@@ -9,7 +9,7 @@
 #include "StepperHelper.hpp"
 
 namespace Stepper {
-    using DriverCallback = std::function<void(uint32_t stepsDone, uint32_t& stepsToDo, float& pulsePeriod_us, void* user_ctx)>;
+    using DriverCallback = std::function<void(uint32_t stepsDone, uint32_t& stepsToDo, float& pulsePeriod_us, float& pulsePeriodIncrement_us, void* user_ctx)>;
 
     class DriverBase {
     public:
@@ -21,48 +21,49 @@ namespace Stepper {
         virtual void init() = 0;
         virtual void start() = 0;
         virtual void stop() = 0;
-
         virtual bool isRunning() = 0;
 
         virtual void enable();
         virtual void disable();
         virtual bool isEnabled() const;
-        virtual void reset(bool resetSteps = false, bool resetStepsMissed = false);
         
-        virtual bool setDirectionQueued(Direction direction);
-        virtual bool setDirectionQueuedFromISR(Direction direction, BaseType_t* pxHigherPriorityTaskWoken = nullptr);
         virtual void setDirection(Direction direction);
-        virtual Direction changeDirection();
         virtual Direction getDirection() const;
+        Direction changeDirection();
         
-        virtual void setTiming(float minPulseWidthHigh_us, float minPulseWidthLow_us, float directionDelay_us, float enableDelay_us);
-        virtual float getMinPulsePeriodUs() const;
-        virtual float getMaxPulsePeriodUs() const;
-        virtual bool setPulsePeriodUs(float pulsePeriod_us);
-        virtual float getPulsePeriodUs() const;
+        bool setDirectionQueued(Direction direction);
+        bool setDirectionQueuedFromISR(Direction direction, BaseType_t* pxHigherPriorityTaskWoken = nullptr);
         
-        virtual bool checkPulsePeriod(float pulsePeriod_us);
-        virtual bool checkPulsePeriod(float pulsePeriod_us, float& pulsePeriodNew_us);
-
-        virtual uint8_t getMicrosteps() const;
+        void setTiming(float minPulseWidthHigh_us, float minPulseWidthLow_us, float directionDelay_us, float enableDelay_us);
+        float getMinPulsePeriodUs() const;
+        float getMaxPulsePeriodUs() const;
+        bool setPulsePeriodUs(float pulsePeriod_us);
+        float getPulsePeriodUs() const;
         
-        virtual uint64_t getSteps() const;
-        virtual void resetSteps(uint64_t count = 0);
+        bool checkPulsePeriod(float pulsePeriod_us);
+        bool checkPulsePeriod(float pulsePeriod_us, float& pulsePeriodNew_us);
         
-        virtual uint64_t getStepsMissed() const;
-        virtual void resetStepsMissed(uint64_t count = 0);
+        uint8_t getMicrosteps() const;
+        
+        uint64_t getSteps() const;
+        uint64_t getStepsFast() const;
+        void resetSteps(uint64_t count = 0);
+        void reset(bool resetSteps = false);
         
         // Register a callback to calculate the next pulse period, based on current pulse period and the steps done since last call.
         // The callback should return the number of steps for the next batch, and update pulsePeriod_us to the new value to apply for the next batch.
         void registerCallbackOnStepDone(DriverCallback callback, void* user_ctx);
         void forceStepCallback();
         
-        protected:
+    protected:
         static void task(void *args);
-        virtual void update(uint32_t stepsDone, uint32_t stepsToDo, float pulsePeriodNew) = 0;
+
+        // Update the params for the next step cycle
+        virtual void update(uint32_t stepsDone, uint32_t stepsToDo, float pulsePeriodNew, float pulsePeriodIncrement) = 0;
         
-        virtual bool doStep(bool immidiately = false);
-        virtual bool doStepFromISR(BaseType_t* pxHigherPriorityTaskWoken = nullptr, bool immidiately = false);
+        // Notify task if step is done
+        bool notifyStepDone(bool immidiately = false);
+        bool notifyStepDoneFromISR(BaseType_t* pxHigherPriorityTaskWoken = nullptr, bool immidiately = false);
         
         Pin pinEnable_;
         Pin pinStep_;
@@ -100,7 +101,7 @@ namespace Stepper {
         TaskHandle_t taskHandle_ {nullptr};
 
         void* callbackOnStepDoneUserCtx_ {nullptr};
-        DriverCallback callbackOnStepDone_ = [this](uint32_t, uint32_t&, float&, void*) {};
+        DriverCallback callbackOnStepDone_ = [this](uint32_t, uint32_t&, float&, float&, void*) {};
         static constexpr const char* log_tag = "Driver";
     };
 }
