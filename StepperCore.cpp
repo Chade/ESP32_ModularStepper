@@ -5,16 +5,14 @@ namespace Stepper
 {
     Core::Core()
     {
-        esp_log_level_set(log_tag, ESP_LOG_INFO);
-
-        ESP_LOGI(log_tag, "Create task queue");
+        LOG_INFO("Create task queue");
         m_taskQueueHandle = xQueueCreate(taskQueueSize, sizeof(struct Task));
         assert(m_taskQueueHandle != 0);
 
-        ESP_LOGI(log_tag, "Create task event loop");
+        LOG_INFO("Create task event loop");
         ESP_ERROR_CHECK(taskEventLoopCreate(taskEventLoopQueueSize, 2));
 
-        ESP_LOGI(log_tag, "Create stop event loop");
+        LOG_INFO("Create stop event loop");
         ESP_ERROR_CHECK(stopEventLoopCreate(stopEventLoopQueueSize, 2));
     }
 
@@ -27,15 +25,15 @@ namespace Stepper
 
     void Core::start()
     {
-        ESP_LOGI(log_tag, "Register to task event");
+        LOG_INFO("Register to task event");
         ESP_ERROR_CHECK(taskEventLoopHandlerRegister(TaskEventId::ANY_EVENT, taskEventCallback, this));
 
-        ESP_LOGI(log_tag, "Register to stop event");
+        LOG_INFO("Register to stop event");
         ESP_ERROR_CHECK(stopEventLoopHandlerRegister(StopEventId::ANY_EVENT, stopEventCallback, this));
 
         if (m_taskHandle == nullptr)
         {
-            ESP_LOGI(log_tag, "Create task runner");
+            LOG_INFO("Create task runner");
             // disableCore1WDT(); // Should not be necessary, as we should not add too much load to one core
             xTaskCreatePinnedToCore(
                 Core::taskRunner,            /* Task function */
@@ -49,16 +47,16 @@ namespace Stepper
         }
         else
         {
-            ESP_LOGE(log_tag, "Task runner already created!");
+            LOG_ERROR("Task runner already created!");
         }
     }
 
     void Core::stop()
     {
-        ESP_LOGI(log_tag, "Unregister from task event");
+        LOG_INFO("Unregister from task event");
         ESP_ERROR_CHECK(taskEventLoopHandlerUnregister(TaskEventId::ANY_EVENT, taskEventCallback));
 
-        ESP_LOGI(log_tag, "Unregister from stop event");
+        LOG_INFO("Unregister from stop event");
         ESP_ERROR_CHECK(stopEventLoopHandlerUnregister(StopEventId::ANY_EVENT, stopEventCallback));
 
         // Signal task runnner to stop
@@ -71,12 +69,12 @@ namespace Stepper
             int64_t timeElapsed = esp_timer_get_time() - startTime;
             if (timeElapsed < taskRunnerStopTimeout_us)
             {
-                ESP_LOGI(log_tag, "Waiting for task runner to stop");
+                LOG_INFO("Waiting for task runner to stop");
                 vTaskDelay(pdMS_TO_TICKS(500));
             }
             else
             {
-                ESP_LOGI(log_tag, "Force task runner to stop");
+                LOG_INFO("Force task runner to stop");
                 vTaskDelete(m_taskHandle);
                 m_taskHandle = nullptr;
             }
@@ -110,7 +108,7 @@ namespace Stepper
             }
         }
 
-        ESP_LOGE(log_tag, "Task runner aborted!");
+        LOG_ERROR("Task runner aborted!");
         vTaskDelete(nullptr);
         core->m_taskHandle = nullptr;
     }
@@ -122,29 +120,29 @@ namespace Stepper
         switch (static_cast<TaskEventId>(eventId))
         {
         case TaskEventId::ANY_EVENT:
-            ESP_LOGI(log_tag, "Received new %s|ANY_EVENT", eventBase);
+            LOG_INFO("Received new %s|ANY_EVENT", eventBase);
             break;
         case TaskEventId::NEW_TASK_EVENT:
-            ESP_LOGI(log_tag, "Received new %s|NEW_TASK_EVENT", eventBase);
+            LOG_INFO("Received new %s|NEW_TASK_EVENT", eventBase);
             if (xQueueSendToBack(core->m_taskQueueHandle, eventData, 0) != pdPASS)
             {
-                ESP_LOGE(log_tag, "Could not enqueue new task");
+                LOG_ERROR("Could not enqueue new task");
             }
             break;
         case TaskEventId::TASK_STARTED_EVENT:
-            ESP_LOGI(log_tag, "Received new %s|TASK_STARTED_EVENT", eventBase);
+            LOG_INFO("Received new %s|TASK_STARTED_EVENT", eventBase);
             break;
         case TaskEventId::TASK_FEEDBACK_EVENT:
-            ESP_LOGI(log_tag, "Received new %s|TASK_FEEDBACK_EVENT", eventBase);
+            LOG_INFO("Received new %s|TASK_FEEDBACK_EVENT", eventBase);
             break;
         case TaskEventId::TASK_FINISHED_EVENT:
-            ESP_LOGI(log_tag, "Received new %s|TASK_FINISHED_EVENT", eventBase);
+            LOG_INFO("Received new %s|TASK_FINISHED_EVENT", eventBase);
             break;
         case TaskEventId::TASK_ABORTED_EVENT:
-            ESP_LOGI(log_tag, "Received new %s|TASK_ABORTED_EVENT", eventBase);
+            LOG_INFO("Received new %s|TASK_ABORTED_EVENT", eventBase);
             break;
         default:
-            ESP_LOGE(log_tag, "Received unknown event %s|%i", eventBase, eventId);
+            LOG_ERROR("Received unknown event %s|%i", eventBase, eventId);
         }
     }
 
@@ -155,25 +153,25 @@ namespace Stepper
         switch (static_cast<StopEventId>(eventId))
         {
         case StopEventId::ANY_EVENT:
-            ESP_LOGI(log_tag, "Received new %s|ANY_EVENT", eventBase);
+            LOG_INFO("Received new %s|ANY_EVENT", eventBase);
             break;
         case StopEventId::RESUME_EVENT:
-            ESP_LOGI(log_tag, "Received new %s|RESUME_EVENT", eventBase);
+            LOG_INFO("Received new %s|RESUME_EVENT", eventBase);
             break;
         case StopEventId::PAUSE_EVENT:
-            ESP_LOGI(log_tag, "Received new %s|PAUSE_EVENT", eventBase);
+            LOG_INFO("Received new %s|PAUSE_EVENT", eventBase);
             break;
         case StopEventId::HALT_EVENT:
-            ESP_LOGI(log_tag, "Received new %s|HALT_EVENT", eventBase);
+            LOG_INFO("Received new %s|HALT_EVENT", eventBase);
             break;
         case StopEventId::FAST_STOP_EVENT:
-            ESP_LOGI(log_tag, "Received new %s|FAST_STOP_EVENT", eventBase);
+            LOG_INFO("Received new %s|FAST_STOP_EVENT", eventBase);
             break;
         case StopEventId::EMERGENCY_STOP_EVENT:
-            ESP_LOGI(log_tag, "Received new %s|EMERGENCY_STOP_EVENT", eventBase);
+            LOG_INFO("Received new %s|EMERGENCY_STOP_EVENT", eventBase);
             break;
         default:
-            ESP_LOGE(log_tag, "Received unknown event %s|%i", eventBase, eventId);
+            LOG_ERROR("Received unknown event %s|%i", eventBase, eventId);
         }
     }
 

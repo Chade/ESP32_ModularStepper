@@ -1,21 +1,22 @@
 #ifndef STEPPER_GENERATOR_HPP
 #define STEPPER_GENERATOR_HPP
 
-#include "StepperDriver_Base.hpp"
 #include <stdint.h>
 #include <FixedPoints.h>
+
+#include "StepperDriver.hpp"
 
 
 using UQ20x12 = UFixed<20, 12>;
 
-namespace Stepper
-{
+namespace Stepper {
+namespace Generic {
 
     class Generator
     {
     public:
         Generator() = delete;
-        Generator(DriverBase& driver);
+        Generator(Driver& driver);
         virtual ~Generator();
 
         struct GeneratorTask {
@@ -103,11 +104,11 @@ namespace Stepper
             return state_.stepsDone;
         };
 
-        DriverBase& getDriver() {
+        Driver& getDriver() {
             return driver_;
         };
 
-        const DriverBase& getDriver() const {
+        const Driver& getDriver() const {
             return driver_;
         };
 
@@ -134,11 +135,11 @@ namespace Stepper
 
         static void callbackOnStepDone(uint32_t stepsDone, uint32_t& stepsToDo, float& pulsePeriod_us, float& pulsePeriodIncrement_us, void* user_ctx);
 
-        DriverBase& driver_;
+        Driver& driver_;
 
         static constexpr UQ20x12 minVelocity_ {1.0};  // steps/s
-        static constexpr const char* log_tag {"Generator"};
     };
+} // namespace Generic
 } // namespace Stepper
 
 #endif // STEPPER_GENERATOR_HPP

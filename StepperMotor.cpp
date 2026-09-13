@@ -1,8 +1,8 @@
 #include "StepperMotor.hpp"
+#include "StepperLog.hpp"
 
 namespace Stepper {
-
-    static constexpr const char* log_tag {"Motor"};
+namespace Generic {
 
     Motor::Motor(Generator& generator, uint32_t stepsPerRevolution, float gearRatio)
         : generator_(generator), stepsPerRevolution_(stepsPerRevolution), gearRatio_(gearRatio) {
@@ -22,8 +22,8 @@ namespace Stepper {
         genTask.acceleration = revolutionToSteps(task.acceleration);
         genTask.deceleration = revolutionToSteps(task.deceleration);
         genTask.direction = task.direction;
-        ESP_LOGI(log_tag, "Motor initialized: stepsPerRevolution=%u, gearRatio=%.2f, stepsPerRevolutionGeared=%u", stepsPerRevolution_, gearRatio_, stepsPerRevolutionGeared_);
-        ESP_LOGI(log_tag, "Steps: %u", genTask.steps);
+        LOG_INFO("Motor initialized: stepsPerRevolution=%u, gearRatio=%.2f, stepsPerRevolutionGeared=%u", stepsPerRevolution_, gearRatio_, stepsPerRevolutionGeared_);
+        LOG_INFO("Steps: %u", genTask.steps);
         return generator_.run(genTask);
     }
 
@@ -47,5 +47,5 @@ namespace Stepper {
         run(task);
     }
 
-
+} // namespace Generic
 } // namespace Stepper

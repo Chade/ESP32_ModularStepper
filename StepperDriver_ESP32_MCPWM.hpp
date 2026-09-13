@@ -1,19 +1,19 @@
-#ifndef STEPPER_DRIVER_MCPWM_HPP
-#define STEPPER_DRIVER_MCPWM_HPP
+#ifndef STEPPER_DRIVER_ESP32_MCPWM_HPP
+#define STEPPER_DRIVER_ESP32_MCPWM_HPP
 
-#include "StepperDriver_Base.hpp"
-#include "driver/mcpwm_types.h"
 #include <driver/mcpwm_prelude.h>
+#include <driver/mcpwm_types.h>
+
+#include "StepperDriver_ESP32.hpp"
 
 
-namespace Stepper
-{
-    class DriverMCPWM : public DriverBase{
+namespace Stepper {
+namespace ESP32 {
+namespace MCPWM {
+    class Driver : public Stepper::ESP32::Driver {
     public:
-        DriverMCPWM() = delete;
-        DriverMCPWM(int8_t enablePin, int8_t stepPin, int8_t directionPin, uint8_t microsteps = 1);
-
-        ~DriverMCPWM();
+        Driver() = delete;
+        Driver(Pin& enablePin, Pin& stepPin, Pin& directionPin, uint8_t microsteps = 1);
 
         void init() override;
         void start() override;
@@ -56,6 +56,8 @@ namespace Stepper
         mcpwm_cmpr_handle_t  comparatorHandle_ {nullptr};
         mcpwm_gen_handle_t   generatorHandle_ {nullptr};
     };
-}
+} // namespace MCPWM
+} // namespace ESP32
+} // namespace Stepper
 
-#endif //STEPPER_DRIVER_MCPWM_HPP
+#endif //STEPPER_DRIVER_ESP32_MCPWM_HPP

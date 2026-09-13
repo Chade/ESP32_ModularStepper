@@ -1,4 +1,4 @@
-#include "StepperDriver_MCPWM.hpp"
+#include "StepperDriver_ESP32_MCPWM.hpp"
 #include "StepperLog.hpp"
 #include "driver/mcpwm_gen.h"
 #include "hal/mcpwm_types.h"
@@ -6,10 +6,12 @@
 #include "driver/mcpwm_timer.h"
 
 namespace Stepper {
-    DriverMCPWM::DriverMCPWM(int8_t enablePin, int8_t stepPin, int8_t directionPin, uint8_t microsteps)
-            : DriverBase(enablePin, stepPin, directionPin, microsteps),
-              timerScaleShift_((microsteps != 0) ? 32 - __builtin_clz(microsteps) : 0),
-              timerResolutionHz_(timerBaseResolution_ << timerScaleShift_) {
+namespace ESP32 {
+namespace MCPWM {
+    Driver::Driver(Pin& enablePin, Pin& stepPin, Pin& directionPin, uint8_t microsteps)
+        : Stepper::ESP32::Driver(enablePin, stepPin, directionPin, microsteps),
+            timerScaleShift_((microsteps != 0) ? 32 - __builtin_clz(microsteps) : 0),
+            timerResolutionHz_(timerBaseResolution_ << timerScaleShift_) {
 
         // Calc the min pulse period based on the timer resolution
         minPulsePeriod_us_ = 1'000'000.0f / timerResolutionHz_;
@@ -17,40 +19,36 @@ namespace Stepper {
         maxPulsePeriod_us_ = timerTicksToUs(UINT16_MAX);
     }
 
-    DriverMCPWM::~DriverMCPWM() {
-
-    }
-
-    void DriverMCPWM::update(uint32_t stepsDone, uint32_t stepsToDo, float pulsePeriodNew_us, float pulsePeriodIncrement_us) {
+    void Driver::update(uint32_t stepsDone, uint32_t stepsToDo, float pulsePeriodNew_us, float pulsePeriodIncrement_us) {
         ESP_ERROR_CHECK(mcpwm_timer_set_period(stepTimerHandle_, timerTicksFromUs(pulsePeriodNew_us)));
     }
 
-    bool IRAM_ATTR DriverMCPWM::comperatorCallbackOnReach(mcpwm_cmpr_handle_t comparator, const mcpwm_compare_event_data_t* edata, void* user_ctx) {
-        DriverMCPWM* self = static_cast<DriverMCPWM*>(user_ctx);
+    bool IRAM_ATTR Driver::comperatorCallbackOnReach(mcpwm_cmpr_handle_t comparator, const mcpwm_compare_event_data_t* edata, void* user_ctx) {
+        Driver* self = static_cast<Driver*>(user_ctx);
         
         BaseType_t xHigherPriorityTaskWoken = pdFALSE;
         self->notifyStepDoneFromISR(&xHigherPriorityTaskWoken);
         return xHigherPriorityTaskWoken;
     }
 
-    bool IRAM_ATTR DriverMCPWM::stepTimerCallbackOnFull(mcpwm_timer_handle_t timer, const mcpwm_timer_event_data_t* edata, void* user_ctx) {
-        DriverMCPWM* self = static_cast<DriverMCPWM*>(user_ctx);
+    bool IRAM_ATTR Driver::stepTimerCallbackOnFull(mcpwm_timer_handle_t timer, const mcpwm_timer_event_data_t* edata, void* user_ctx) {
+        Driver* self = static_cast<Driver*>(user_ctx);
         return false;
     }
 
-    bool IRAM_ATTR DriverMCPWM::stepTimerCallbackOnEmpty(mcpwm_timer_handle_t timer, const mcpwm_timer_event_data_t* edata, void* user_ctx) {
-        DriverMCPWM* self = static_cast<DriverMCPWM*>(user_ctx);
+    bool IRAM_ATTR Driver::stepTimerCallbackOnEmpty(mcpwm_timer_handle_t timer, const mcpwm_timer_event_data_t* edata, void* user_ctx) {
+        Driver* self = static_cast<Driver*>(user_ctx);
         return false;
     }
 
-    bool IRAM_ATTR DriverMCPWM::stepTimerCallbackOnStop(mcpwm_timer_handle_t timer, const mcpwm_timer_event_data_t* edata, void* user_ctx) {
-        DriverMCPWM* self = static_cast<DriverMCPWM*>(user_ctx);
+    bool IRAM_ATTR Driver::stepTimerCallbackOnStop(mcpwm_timer_handle_t timer, const mcpwm_timer_event_data_t* edata, void* user_ctx) {
+        Driver* self = static_cast<Driver*>(user_ctx);
         mcpwm_generator_set_force_level(self->generatorHandle_, self->pinStep_.getLevelDisabled(), false);
         self->mcpwmTimerRunning_ = false;
         return false;
     }
 
-    void DriverMCPWM::init() {
+    void Driver::init() {
         mcpwm_timer_config_t stepTimerConfig;
         stepTimerConfig.group_id = 0;
         stepTimerConfig.clk_src = MCPWM_TIMER_CLK_SRC_DEFAULT;
@@ -67,7 +65,7 @@ namespace Stepper {
         mcpwm_timer_event_callbacks_t stepTimerCallbacks;
         stepTimerCallbacks.on_full = NULL;
         stepTimerCallbacks.on_empty = NULL;
-        stepTimerCallbacks.on_stop = DriverMCPWM::stepTimerCallbackOnStop;
+        stepTimerCallbacks.on_stop = Driver::stepTimerCallbackOnStop;
 
         ESP_ERROR_CHECK(mcpwm_timer_register_event_callbacks(stepTimerHandle_, &stepTimerCallbacks, this));
 
@@ -94,7 +92,7 @@ namespace Stepper {
         ESP_ERROR_CHECK(mcpwm_new_comparator(operatorHandle_, &comparatorConfig, &comparatorHandle_));
 
         mcpwm_comparator_event_callbacks_t comperatorCallbacks;
-        comperatorCallbacks.on_reach = &DriverMCPWM::comperatorCallbackOnReach;
+        comperatorCallbacks.on_reach = &Driver::comperatorCallbackOnReach;
         ESP_ERROR_CHECK(mcpwm_comparator_register_event_callbacks(comparatorHandle_, &comperatorCallbacks, this));
         ESP_ERROR_CHECK(mcpwm_comparator_set_compare_value(comparatorHandle_, timerTicksFromUs(std::max(minPulseWidthHigh_us_, minPulsePeriod_us_))));
 
@@ -116,28 +114,30 @@ namespace Stepper {
         ESP_ERROR_CHECK(mcpwm_timer_enable(stepTimerHandle_));
     }
 
-    void DriverMCPWM::start() {
+    void Driver::start() {
         ESP_ERROR_CHECK(mcpwm_timer_set_period(stepTimerHandle_, timerTicksFromUs(pulsePeriod_us_)));
         ESP_ERROR_CHECK(mcpwm_timer_start_stop(stepTimerHandle_, MCPWM_TIMER_START_NO_STOP));
         mcpwmTimerRunning_ = true;
-        ESP_LOGI(log_tag, "MCPWM timer started");
+        LOG_INFO("MCPWM timer started");
     }
 
-    void DriverMCPWM::startOnce() {
+    void Driver::startOnce() {
         ESP_ERROR_CHECK(mcpwm_timer_set_period(stepTimerHandle_, timerTicksFromUs(pulsePeriod_us_)));
         ESP_ERROR_CHECK(mcpwm_timer_start_stop(stepTimerHandle_, MCPWM_TIMER_START_STOP_FULL));
         //ESP_ERROR_CHECK(mcpwm_timer_start_stop(stepTimerHandle_, MCPWM_TIMER_START_STOP_EMPTY));
         mcpwmTimerRunning_ = true;
-        ESP_LOGI(log_tag, "MCPWM timer started once");
+        LOG_INFO("MCPWM timer started once");
     }
 
-    void DriverMCPWM::stop() {
+    void Driver::stop() {
         ESP_ERROR_CHECK(mcpwm_timer_start_stop(stepTimerHandle_, MCPWM_TIMER_STOP_FULL));
         mcpwmTimerRunning_ = false;
-        ESP_LOGI(log_tag, "MCPWM timer stopped");
+        LOG_INFO("MCPWM timer stopped");
     }
 
-    bool DriverMCPWM::isRunning() {
+    bool Driver::isRunning() {
         return mcpwmTimerRunning_;
     }
-}
+} // namespace MCPWM
+} // namespace ESP32
+} // namespace Stepper

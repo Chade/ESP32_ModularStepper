@@ -4,6 +4,7 @@
 #include "StepperGenerator.hpp"
 
 namespace Stepper {
+namespace Generic {
     class Motor {
     public:
         Motor() = delete;
@@ -74,6 +75,7 @@ namespace Stepper {
         uint32_t stepsPerRevolution_;
         uint32_t stepsPerRevolutionGeared_;
     };
-}
+} // namespace Generic
+} // namespace Stepper
 
 #endif // STEPPER_MOTOR_HPP

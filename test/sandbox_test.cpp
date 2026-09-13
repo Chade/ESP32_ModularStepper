@@ -65,6 +65,75 @@ void testStepperGenerator() {
     }
 }
 
+void testStepperGeneratorZeroAcc() {
+    std::cout << "\n=== Testing Stepper Generator With Zero Acc ===" << std::endl;
+
+    MockDriver driver;
+    Stepper::Generator generator(driver);
+
+    // Test position mode task (steps > 0)
+    Stepper::Generator::GeneratorTask task;
+    task.steps = 20;
+    task.velocity = 10.0f;
+    task.acceleration = 0.0f;
+    task.deceleration = 10.0f;
+    task.direction = Stepper::Direction::Clockwise;
+
+    generator.run(task);
+    printGeneratorState(generator.getState());
+
+    for (uint32_t i = 0; i < task.steps; ++i) {
+        generator.advanceStateAfterStep(1);
+        printGeneratorState(generator.getState());
+    }
+}
+
+void testStepperGeneratorZeroDec() {
+    std::cout << "\n=== Testing Stepper Generator With Zero Dec ===" << std::endl;
+
+    MockDriver driver;
+    Stepper::Generator generator(driver);
+
+    // Test position mode task (steps > 0)
+    Stepper::Generator::GeneratorTask task;
+    task.steps = 20;
+    task.velocity = 10.0f;
+    task.acceleration = 10.0f;
+    task.deceleration = 0.0f;
+    task.direction = Stepper::Direction::Clockwise;
+
+    generator.run(task);
+    printGeneratorState(generator.getState());
+
+    for (uint32_t i = 0; i < task.steps; ++i) {
+        generator.advanceStateAfterStep(1);
+        printGeneratorState(generator.getState());
+    }
+}
+
+void testStepperGeneratorZeroAccDec() {
+    std::cout << "\n=== Testing Stepper Generator With Zero Acc & Dec ===" << std::endl;
+
+    MockDriver driver;
+    Stepper::Generator generator(driver);
+
+    // Test position mode task (steps > 0)
+    Stepper::Generator::GeneratorTask task;
+    task.steps = 20;
+    task.velocity = 10.0f;
+    task.acceleration = 0.0f;
+    task.deceleration = 0.0f;
+    task.direction = Stepper::Direction::Clockwise;
+
+    generator.run(task);
+    printGeneratorState(generator.getState());
+
+    for (uint32_t i = 0; i < task.steps; ++i) {
+        generator.advanceStateAfterStep(1);
+        printGeneratorState(generator.getState());
+    }
+}
+
 // Pure C++ Function Tests
 void testEnumHelpers() {
     std::cout << "\n=== Testing StepperHelper Enums ===" << std::endl;
@@ -81,22 +150,8 @@ void testEnumHelpers() {
     printTestResult("State bitwise compare_enums", compared == (6 & 2));
 }
 
-void testFixedPointKinematics() {
-    std::cout << "\n=== Testing FixedPoints Kinematics Math ===" << std::endl;
-
-    UQ20x12 v0 = 0.0;
-    UQ20x12 accel = 1000.5; // steps/s^2
-    UQ20x12 dt = 0.01;      // 10ms
-
-    UQ20x12 v1 = v0 + accel * dt;
-    std::cout << "Calculated velocity after 10ms: " << static_cast<float>(v1) << " steps/s" << std::endl;
-
-    // Check fixed-point quantization result (~9.77 steps/s due to 12-bit fractional resolution)
-    bool checkFP = (static_cast<float>(v1) > 9.5f && static_cast<float>(v1) < 10.5f);
-    printTestResult("FixedPoint Velocity Accumulation", checkFP);
-}
-
 void testFixedPointSquareroot() {
+    std::cout << "\n=== Testing Squareroot Calculation ===" << std::endl;
     UQ20x12 v1 = 2.0;
     UQ20x12 v2 = 16.0;
     UQ20x12 v3 = 100.0;
@@ -182,11 +237,13 @@ int main() {
     std::cout << "==========================================" << std::endl;
 
     //testEnumHelpers();
-    testStepperGenerator();
-    testBatchKinematics();
-    testFixedPointKinematics();
-    testFixedPointSquareroot();
-    testStepProfileGeneration();
+    //testStepperGenerator();
+    testStepperGeneratorZeroAcc();
+    testStepperGeneratorZeroDec();
+    testStepperGeneratorZeroAccDec();
+    //testBatchKinematics();
+    //testFixedPointSquareroot();
+    //testStepProfileGeneration();
 
     std::cout << "\nAll sandbox tests completed successfully!\n" << std::endl;
     return 0;

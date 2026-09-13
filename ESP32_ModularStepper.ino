@@ -1,8 +1,10 @@
-#include "StepperLog.hpp"
-#include "StepperDriver_MCPWM.hpp"
-#include "StepperGenerator.hpp"
-//#include "FastRotaryEncoder.hpp"
 #include <ESP32RotaryEncoder.h>
+//#include "FastRotaryEncoder.hpp"
+
+#include "StepperLog.hpp"
+#include "StepperPin_ESP32.hpp"
+#include "StepperDriver_ESP32_MCPWM.hpp"
+#include "StepperGenerator.hpp"
 
 
 //FastRotaryEncoder encoder(33, 32, 35, 100, 100000, 100);
@@ -10,17 +12,20 @@ RotaryEncoder rotaryEncoder( 19, 18, 5, 21 );
 
 //Stepper::Core core;
 //Stepper::Task task;
+Stepper::ESP32::Pin pinEnable(25);
+Stepper::ESP32::Pin pinStep(26);
+Stepper::ESP32::Pin pinDirection(27);
 
-Stepper::DriverMCPWM driver(25, 26, 27, 16);
-Stepper::Generator generator(driver);
-Stepper::Generator::GeneratorTask task;
+Stepper::ESP32::MCPWM::Driver driver(pinEnable, pinStep, pinDirection, 16);
+Stepper::Generic::Generator generator(driver);
+Stepper::Generic::Generator::GeneratorTask task;
 
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(115200);
   Serial.setDebugOutput(true);
 
-  esp_log_level_set("*", ESP_LOG_INFO);
+  LOG_LEVEL_INIT();
 
   while (!Serial) { vTaskDelay(pdMS_TO_TICKS(1000)); }
 
@@ -40,8 +45,8 @@ void setup() {
 */
   task.steps = 3200;
   // task.steps = 0;
-  task.velocity = 10000.0f;
-  task.acceleration = 1000.0f;
+  task.velocity = 1000.0f;
+  task.acceleration = 0.0f;
   task.deceleration = 1000.0f;
   task.direction = Stepper::Direction::Clockwise;
 
@@ -52,13 +57,13 @@ void setup() {
   // rotaryEncoder.setEncoderValue(task.velocity.getInteger());
 
   rotaryEncoder.onTurned([](long value) {
-    Serial.print("Steps: ");
-    Serial.println(value);
-    task.steps = value;
-
-    // Serial.print("Velocity: ");
+    // Serial.print("Steps: ");
     // Serial.println(value);
-    // task.velocity = value;
+    // task.steps = value;
+
+    Serial.print("Velocity: ");
+    Serial.println(value);
+    task.velocity = value;
   });
 
   rotaryEncoder.onPressed([](unsigned long duration) {
