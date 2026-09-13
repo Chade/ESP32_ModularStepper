@@ -20,7 +20,7 @@ g++ -std=c++17 -Wall -Wextra -Wno-unused-parameter -Wno-format \
     -I"$FIXED_POINTS_INC" \
     -I"$PROJECT_DIR" \
     -I"$SCRIPT_DIR" \
-    "$PROJECT_DIR/StepperDriver_Base.cpp" \
+    "$PROJECT_DIR/StepperDriver.cpp" \
     "$PROJECT_DIR/StepperGenerator.cpp" \
     sandbox_test.cpp -o "$TARGET"
 

@@ -68,10 +68,7 @@
 #define LOG_COLOR_WARN     LOG_COLOR(LOG_COLOR_YELLOW)
 #define LOG_COLOR_INFO     LOG_COLOR(LOG_COLOR_WHITE)
 #define LOG_COLOR_DEBUG    LOG_COLOR(LOG_COLOR_GREEN)
-#define LOG_COLOR_VERBOSE  LOG_COLOR(LOG_COLOR_GRAY)
-
-#define LOG_FORMAT(level, format)	LOG_COLOR_##level "["##level"]" format LOG_COLOR_RESET
-#define LOG_FORMAT(level, format)	"[" ##level "]" format
+#define LOG_FORMAT(level, format)	LOG_COLOR_##level "[" #level "] " format LOG_COLOR_RESET "\n"
 
 #define LOG_LEVEL_NONE    0
 #define LOG_LEVEL_ERROR   1

@@ -5,12 +5,12 @@
 #include <random>
 #include <vector>
 
-// Include project headers using host stubs
-#include "StepperGenerator.hpp"
-#include "StepperDriver_Base.hpp"
-#include "StepperHelper.hpp"
 #include <FixedPoints.h>
 #include <FixedPointsCommon.h>
+// Include project headers using host stubs
+#include "StepperGenerator.hpp"
+#include "StepperDriver_Mock.hpp"
+#include "StepperHelper.hpp"
 
 using UQ20x12 = UFixed<20,12>;
 
@@ -23,18 +23,7 @@ void printTestResult(const std::string& testName, bool success) {
     }
 }
 
-// Minimal mock driver implementation for host sandbox testing
-class MockDriver : public Stepper::DriverBase {
-public:
-    MockDriver() : DriverBase(1, 2, 3, 1) {}
-    void init() override {}
-    void start() override {}
-    void stop() override {}
-    bool isRunning() override { return false; }
-    void update(uint32_t stepsDone, uint32_t stepsToDo, float pulsePeriodNew, float pulsePeriodIncrement) override {}
-};
-
-void printGeneratorState(const Stepper::Generator::GeneratorState& state) {
+void printGeneratorState(const Stepper::Generic::Generator::GeneratorState& state) {
     std::cout << "Generator State: " << static_cast<int>(state.currentState)  << " | " << static_cast<int>(state.previousState) << std::endl;
     std::cout << "  Direction: " << static_cast<int>(state.currentDirection) << " | " << static_cast<int>(state.targetDirection) << std::endl;
     std::cout << "  Velocity: " << static_cast<float>(state.currentVelocity) << " steps/s" << " --> " << static_cast<float>(state.targetVelocity) << " steps/s" << std::endl;
@@ -45,11 +34,12 @@ void printGeneratorState(const Stepper::Generator::GeneratorState& state) {
 void testStepperGenerator() {
     std::cout << "\n=== Testing Stepper Generator ===" << std::endl;
 
-    MockDriver driver;
-    Stepper::Generator generator(driver);
+    Stepper::Mock::Pin pin(0);
+    Stepper::Mock::Driver driver(pin, pin, pin);
+    Stepper::Generic::Generator generator(driver);
 
     // Test position mode task (steps > 0)
-    Stepper::Generator::GeneratorTask task;
+    Stepper::Generic::Generator::GeneratorTask task;
     task.steps = 1000;
     task.velocity = 1000.0f;
     task.acceleration = 1000.0f;
@@ -68,11 +58,12 @@ void testStepperGenerator() {
 void testStepperGeneratorZeroAcc() {
     std::cout << "\n=== Testing Stepper Generator With Zero Acc ===" << std::endl;
 
-    MockDriver driver;
-    Stepper::Generator generator(driver);
+    Stepper::Mock::Pin pin(0);
+    Stepper::Mock::Driver driver(pin, pin, pin);
+    Stepper::Generic::Generator generator(driver);
 
     // Test position mode task (steps > 0)
-    Stepper::Generator::GeneratorTask task;
+    Stepper::Generic::Generator::GeneratorTask task;
     task.steps = 20;
     task.velocity = 10.0f;
     task.acceleration = 0.0f;
@@ -91,11 +82,12 @@ void testStepperGeneratorZeroAcc() {
 void testStepperGeneratorZeroDec() {
     std::cout << "\n=== Testing Stepper Generator With Zero Dec ===" << std::endl;
 
-    MockDriver driver;
-    Stepper::Generator generator(driver);
+    Stepper::Mock::Pin pin(0);
+    Stepper::Mock::Driver driver(pin, pin, pin);
+    Stepper::Generic::Generator generator(driver);
 
     // Test position mode task (steps > 0)
-    Stepper::Generator::GeneratorTask task;
+    Stepper::Generic::Generator::GeneratorTask task;
     task.steps = 20;
     task.velocity = 10.0f;
     task.acceleration = 10.0f;
@@ -114,11 +106,12 @@ void testStepperGeneratorZeroDec() {
 void testStepperGeneratorZeroAccDec() {
     std::cout << "\n=== Testing Stepper Generator With Zero Acc & Dec ===" << std::endl;
 
-    MockDriver driver;
-    Stepper::Generator generator(driver);
+    Stepper::Mock::Pin pin(0);
+    Stepper::Mock::Driver driver(pin, pin, pin);
+    Stepper::Generic::Generator generator(driver);
 
     // Test position mode task (steps > 0)
-    Stepper::Generator::GeneratorTask task;
+    Stepper::Generic::Generator::GeneratorTask task;
     task.steps = 20;
     task.velocity = 10.0f;
     task.acceleration = 0.0f;
@@ -183,10 +176,11 @@ void testFixedPointSquareroot() {
 
 void testBatchKinematics() {
     std::cout << "\n=== Testing Batch Kinematics (Multi-Step Advances) ===" << std::endl;
-    MockDriver driver;
-    Stepper::Generator generator(driver);
+    Stepper::Mock::Pin pin(0);
+    Stepper::Mock::Driver driver(pin, pin, pin);
+    Stepper::Generic::Generator generator(driver);
 
-    Stepper::Generator::GeneratorTask task;
+    Stepper::Generic::Generator::GeneratorTask task;
     task.steps = 1000;
     task.velocity = 1000.0f;
     task.acceleration = 1000.0f;
@@ -215,7 +209,7 @@ void testBatchKinematics() {
 void testStepProfileGeneration() {
     std::cout << "\n=== Testing Step Profile generation ===" << std::endl;
 
-    Stepper::Generator::GeneratorState state;
+    Stepper::Generic::Generator::GeneratorState state;
     state.stepsTotal = 1249;
     state.currentVelocity = 500.0f;
     state.targetVelocity = 0.0f;
@@ -224,10 +218,10 @@ void testStepProfileGeneration() {
     state.currentDirection = Stepper::Direction::Clockwise;
     state.targetDirection = Stepper::Direction::Clockwise;
 
-    Stepper::Generator::computeStepProfile(state);
+    Stepper::Generic::Generator::computeStepProfile(state);
     printGeneratorState(state);
 
-    Stepper::Generator::computeStepProfile_v2(state);
+    Stepper::Generic::Generator::computeStepProfile_v2(state);
     printGeneratorState(state);
 }
 
