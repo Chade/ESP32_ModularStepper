@@ -14,7 +14,7 @@ namespace Mock {
         Driver() = delete;
 
         Driver(Pin& enablePin, Pin& stepPin, Pin& directionPin, uint8_t microsteps = 1)
-            : Stepper::Generic::Driver(enablePin, stepPin, directionPin, microsteps) {};
+                : Stepper::Generic::Driver(enablePin, stepPin, directionPin, microsteps) {};
 
         virtual void init() {};
         virtual void start() {};

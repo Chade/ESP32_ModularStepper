@@ -8,13 +8,13 @@ namespace Mock {
     class Pin : public Stepper::Generic::Pin {
     public:
         Pin()
-            : Stepper::Generic::Pin(0) {};
-            
+                : Stepper::Generic::Pin(0) {};
+
         Pin(int8_t pin, Mode mode = Mode::Input_Output) 
-            : Stepper::Generic::Pin(pin, mode) {};
+                : Stepper::Generic::Pin(pin, mode) {};
 
         Pin(uint8_t pin, bool inverse,Mode mode = Mode::Input_Output)
-            : Stepper::Generic::Pin(pin, inverse, mode) {};
+                : Stepper::Generic::Pin(pin, inverse, mode) {};
 
         void setup(Mode mode) {};
         bool isEnabled() const { return true; };

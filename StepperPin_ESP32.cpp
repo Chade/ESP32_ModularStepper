@@ -4,12 +4,12 @@ namespace Stepper {
 namespace ESP32 {
 
     Pin::Pin(int8_t pin,Mode mode)
-        : Stepper::Generic::Pin(pin, mode) {
+            : Stepper::Generic::Pin(pin, mode) {
         setup(mode);
     }
 
     Pin::Pin(uint8_t pin, bool inverse,Mode mode)
-        : Stepper::Generic::Pin(pin, inverse, mode) {
+            : Stepper::Generic::Pin(pin, inverse, mode) {
         setup(mode);
     }
 

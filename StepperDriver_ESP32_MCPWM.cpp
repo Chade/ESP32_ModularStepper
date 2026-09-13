@@ -9,9 +9,9 @@ namespace Stepper {
 namespace ESP32 {
 namespace MCPWM {
     Driver::Driver(Pin& enablePin, Pin& stepPin, Pin& directionPin, uint8_t microsteps)
-        : Stepper::ESP32::Driver(enablePin, stepPin, directionPin, microsteps),
-            timerScaleShift_((microsteps != 0) ? 32 - __builtin_clz(microsteps) : 0),
-            timerResolutionHz_(timerBaseResolution_ << timerScaleShift_) {
+            : Stepper::ESP32::Driver(enablePin, stepPin, directionPin, microsteps),
+                timerScaleShift_((microsteps != 0) ? 32 - __builtin_clz(microsteps) : 0),
+                timerResolutionHz_(timerBaseResolution_ << timerScaleShift_) {
 
         // Calc the min pulse period based on the timer resolution
         minPulsePeriod_us_ = 1'000'000.0f / timerResolutionHz_;

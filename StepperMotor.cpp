@@ -5,7 +5,7 @@ namespace Stepper {
 namespace Generic {
 
     Motor::Motor(Generator& generator, uint32_t stepsPerRevolution, float gearRatio)
-        : generator_(generator), stepsPerRevolution_(stepsPerRevolution), gearRatio_(gearRatio) {
+            : generator_(generator), stepsPerRevolution_(stepsPerRevolution), gearRatio_(gearRatio) {
         assert(stepsPerRevolution_ > 0);
         assert(gearRatio_ > 0.0f);
         stepsPerRevolutionGeared_ = stepsPerRevolution_ * gearRatio_;
