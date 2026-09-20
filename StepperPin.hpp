@@ -21,7 +21,7 @@ namespace Generic {
             enableLevel_ = (pin > 0) ? 1 : 0;
         }
 
-        Pin(uint8_t pin, bool inverse,Mode mode = Mode::Input_Output) {
+        Pin(uint8_t pin, bool inverse, Mode mode = Mode::Input_Output) {
             gpio_ = pin;
             enableLevel_ = !inverse;
         };

@@ -13,7 +13,7 @@ namespace Generic {
     class Driver {
     public:
         Driver() = delete;
-        Driver(Pin& enablePin, Pin& stepPin, Pin& directionPin, uint8_t microsteps = 1);
+        Driver(Generic::Pin& enablePin, Generic::Pin& stepPin, Generic::Pin& directionPin, uint8_t microsteps = 1);
 
         virtual ~Driver() = default;
 
@@ -54,9 +54,9 @@ namespace Generic {
         // Update the params for the next step cycle
         virtual void update(uint32_t stepsDone, uint32_t stepsToDo, float pulsePeriodNew, float pulsePeriodIncrement) = 0;
         
-        Pin& pinEnable_;
-        Pin& pinStep_;
-        Pin& pinDirection_;
+        Generic::Pin& pinEnable_;
+        Generic::Pin& pinStep_;
+        Generic::Pin& pinDirection_;
 
         float minPulseWidthHigh_us_ {1.0f};
         float minPulseWidthLow_us_ {1.0f};

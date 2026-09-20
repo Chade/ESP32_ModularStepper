@@ -3,7 +3,7 @@
 
 namespace Stepper {
 namespace Generic {
-    Driver::Driver(Pin& enablePin, Pin& stepPin, Pin& directionPin, uint8_t microsteps)
+    Driver::Driver(Generic::Pin& enablePin, Generic::Pin& stepPin, Generic::Pin& directionPin, uint8_t microsteps)
             : pinEnable_(enablePin), pinStep_(stepPin), pinDirection_(directionPin), microsteps_(microsteps) {
 
     }

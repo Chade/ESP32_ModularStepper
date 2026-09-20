@@ -3,8 +3,8 @@
 
 namespace Stepper {
 namespace ESP32 {
-    Driver::Driver(Pin& enablePin, Pin& stepPin, Pin& directionPin, uint8_t microsteps)
-            : Stepper::Generic::Driver(enablePin, stepPin, directionPin, microsteps) {
+    Driver::Driver(Generic::Pin& enablePin, Generic::Pin& stepPin, Generic::Pin& directionPin, uint8_t microsteps)
+            : Generic::Driver(enablePin, stepPin, directionPin, microsteps) {
 
         // Create step task
         xTaskCreatePinnedToCore(

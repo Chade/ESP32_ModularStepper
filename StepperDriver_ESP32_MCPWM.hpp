@@ -10,10 +10,10 @@
 namespace Stepper {
 namespace ESP32 {
 namespace MCPWM {
-    class Driver : public Stepper::ESP32::Driver {
+    class Driver : public ESP32::Driver {
     public:
         Driver() = delete;
-        Driver(Pin& enablePin, Pin& stepPin, Pin& directionPin, uint8_t microsteps = 1);
+        Driver(Generic::Pin& enablePin, Generic::Pin& stepPin, Generic::Pin& directionPin, uint8_t microsteps = 1);
 
         void init() override;
         void start() override;

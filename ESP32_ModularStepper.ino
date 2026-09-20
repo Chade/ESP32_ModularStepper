@@ -5,6 +5,7 @@
 #include "StepperPin_ESP32.hpp"
 #include "StepperDriver_ESP32_MCPWM.hpp"
 #include "StepperGenerator.hpp"
+#include "StepperMotor.hpp"
 
 
 //FastRotaryEncoder encoder(33, 32, 35, 100, 100000, 100);
@@ -18,7 +19,9 @@ Stepper::ESP32::Pin pinDirection(27);
 
 Stepper::ESP32::MCPWM::Driver driver(pinEnable, pinStep, pinDirection, 16);
 Stepper::Generic::Generator generator(driver);
-Stepper::Generic::Generator::GeneratorTask task;
+Stepper::Generic::Motor motor(generator, 200, 1.0f);
+
+Stepper::Generic::Motor::MotorTask task;
 
 void setup() {
   // put your setup code here, to run once:
@@ -43,17 +46,17 @@ void setup() {
       Serial.println("Encoder1: click");
   });
 */
-  task.steps = 3200;
-  // task.steps = 0;
-  task.velocity = 1000.0f;
-  task.acceleration = 0.0f;
-  task.deceleration = 1000.0f;
+
+  task.velocity = 1.0;
+  task.revolutions = 90.0f;
+  task.acceleration = 100.0f;
+  task.deceleration = 100.0f;
   task.direction = Stepper::Direction::Clockwise;
 
   rotaryEncoder.setEncoderType( EncoderType::HAS_PULLUP );
 	rotaryEncoder.setBoundaries(0, 1'000'000, false);
-  rotaryEncoder.setStepValue(100);
-  rotaryEncoder.setEncoderValue(task.steps);
+  rotaryEncoder.setStepValue(1);
+  rotaryEncoder.setEncoderValue(task.revolutions);
   // rotaryEncoder.setEncoderValue(task.velocity.getInteger());
 
   rotaryEncoder.onTurned([](long value) {
@@ -61,9 +64,9 @@ void setup() {
     // Serial.println(value);
     // task.steps = value;
 
-    Serial.print("Velocity: ");
+    Serial.print("Angle: ");
     Serial.println(value);
-    task.velocity = value;
+    task.revolutions = value;
   });
 
   rotaryEncoder.onPressed([](unsigned long duration) {
@@ -75,7 +78,7 @@ void setup() {
       else
         task.direction = Stepper::Direction::Clockwise;
     }
-    generator.run(task);
+    motor.run(task);
   });
   rotaryEncoder.begin();
   driver.enable();

@@ -6,7 +6,7 @@
 
 namespace Stepper {
 namespace ESP32 {
-    class Pin : public Stepper::Generic::Pin {
+    class Pin : public Generic::Pin {
     public:
         Pin() = delete;
         Pin(int8_t pin, Mode mode = Mode::Input_Output);

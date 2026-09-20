@@ -4,7 +4,7 @@
 namespace Stepper {
 namespace Generic {
 
-    Motor::Motor(Generator& generator, uint32_t stepsPerRevolution, float gearRatio)
+    Motor::Motor(Generic::Generator& generator, uint32_t stepsPerRevolution, float gearRatio)
             : generator_(generator), stepsPerRevolution_(stepsPerRevolution), gearRatio_(gearRatio) {
         assert(stepsPerRevolution_ > 0);
         assert(gearRatio_ > 0.0f);
@@ -16,20 +16,18 @@ namespace Generic {
     }
 
     bool Motor::run(const MotorTask& task) {
-        Generator::GeneratorTask genTask;
-        genTask.steps = static_cast<uint32_t>(angleDegToSteps(task.angle));
-        genTask.velocity = revolutionToSteps(task.velocity);
-        genTask.acceleration = revolutionToSteps(task.acceleration);
-        genTask.deceleration = revolutionToSteps(task.deceleration);
+        Generic::Generator::GeneratorTask genTask;
+        genTask.steps = static_cast<uint32_t>(revolutionsToSteps(task.revolutions));
+        genTask.velocity = revolutionsToSteps(task.velocity);
+        genTask.acceleration = revolutionsToSteps(task.acceleration);
+        genTask.deceleration = revolutionsToSteps(task.deceleration);
         genTask.direction = task.direction;
-        LOG_INFO("Motor initialized: stepsPerRevolution=%u, gearRatio=%.2f, stepsPerRevolutionGeared=%u", stepsPerRevolution_, gearRatio_, stepsPerRevolutionGeared_);
-        LOG_INFO("Steps: %u", genTask.steps);
         return generator_.run(genTask);
     }
 
     void Motor::run(float targetVelocity, float acceleration, float deceleration, Direction direction) {
         MotorTask task;
-        task.angle = 0.0f;
+        task.revolutions = 0.0f;
         task.velocity = targetVelocity;
         task.acceleration = acceleration;
         task.deceleration = deceleration;
@@ -37,9 +35,9 @@ namespace Generic {
         run(task);
     }
 
-    void Motor::run(float angle_deg, float targetVelocity, float acceleration, float deceleration, Direction direction) {
+    void Motor::run(float revolutions, float targetVelocity, float acceleration, float deceleration, Direction direction) {
         MotorTask task;
-        task.angle = angle_deg;
+        task.revolutions = revolutions;
         task.velocity = targetVelocity;
         task.acceleration = acceleration;
         task.deceleration = deceleration;

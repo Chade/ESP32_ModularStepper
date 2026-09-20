@@ -35,7 +35,7 @@
 
 #undef ARDUHAL_LOG_FORMAT
 #define ARDUHAL_LOG_FORMAT(letter, format)                                                                                                              \
-  ARDUHAL_LOG_COLOR_##letter format ARDUHAL_LOG_RESET_COLOR
+  ARDUHAL_LOG_COLOR_##letter format ARDUHAL_LOG_RESET_COLOR "\n"
 
 // Initialize runtime log level (needed because Arduino's initArduino sets level to ERROR by default)
 #define LOG_LEVEL_INIT()          esp_log_level_set("*", (esp_log_level_t)LOG_LOCAL_LEVEL)
