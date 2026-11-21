@@ -3,37 +3,54 @@
 namespace Stepper {
 namespace ESP32 {
 
-    Pin::Pin(int8_t pin,Mode mode)
-            : Generic::Pin(pin, mode) {
-        setup(mode);
+    Pin::Pin(int8_t pin,IoMode ioMode, PullMode pullMode)
+            : Generic::Pin(pin, ioMode, pullMode) {
+        setIoMode(ioMode);
+        setPullMode(pullMode);
     }
 
-    Pin::Pin(uint8_t pin, bool inverse,Mode mode)
-            : Generic::Pin(pin, inverse, mode) {
-        setup(mode);
+    Pin::Pin(uint8_t pin, bool inverse,IoMode ioMode, PullMode pullMode)
+            : Generic::Pin(pin, inverse, ioMode, pullMode) {
+        setIoMode(ioMode);
+        setPullMode(pullMode);
     }
 
-    void Pin::setup(Mode mode) {
+    void Pin::setIoMode(IoMode mode) {
         gpio_mode_t gpioMode;
-        switch(mode)
-        {
-            case Mode::Disable:
+        switch(mode) {
+            case IoMode::Disable:
                 gpioMode = GPIO_MODE_DISABLE;
                 break;
-            case Mode::Input:
+            case IoMode::Input:
                 gpioMode = GPIO_MODE_INPUT;
                 break;
-            case Mode::Output:
+            case IoMode::Output:
                 gpioMode = GPIO_MODE_OUTPUT;
                 break;
-            case Mode::Input_Output:
+            case IoMode::Input_Output:
                 gpioMode = GPIO_MODE_INPUT_OUTPUT;
                 break;
         }
         ESP_ERROR_CHECK(gpio_set_direction((gpio_num_t)gpio_, gpioMode));
     }
 
-    bool Pin::isEnabled() const{
+    void Pin::setPullMode(PullMode pullMode) {
+        gpio_pull_mode_t gpioPullMode;
+        switch (pullMode) {
+            case PullMode::PullUp:
+                gpioPullMode = GPIO_PULLUP_ONLY;
+                break;
+            case PullMode::PullDown:
+                gpioPullMode = GPIO_PULLDOWN_ONLY;
+                break;
+            case PullMode::Floating:
+                gpioPullMode = GPIO_FLOATING;
+                break;
+        }
+        ESP_ERROR_CHECK(gpio_set_pull_mode((gpio_num_t)gpio_, gpioPullMode));
+    }
+
+    bool Pin::isEnabled() const {
         uint32_t level = gpio_get_level((gpio_num_t)gpio_);
         return (level == enableLevel_);
     }

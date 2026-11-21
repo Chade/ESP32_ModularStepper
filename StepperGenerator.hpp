@@ -37,6 +37,8 @@ namespace Generic {
         // Returns immediately; generator schedules steps until done.
         bool run(uint64_t steps, float targetVelocity, float acceleration, float deceleration, Direction direction);
 
+        void stop();
+
         struct GeneratorState {
             State currentState = State::Undefined; // movement state
             State previousState = State::Undefined; // movement state

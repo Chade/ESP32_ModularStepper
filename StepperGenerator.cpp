@@ -80,8 +80,12 @@ namespace Generic {
         task.direction = direction;
 
         return run(task);
-    }  
+    }
 
+    void Generator::stop() {
+        driver_.stop();
+        state_.currentState = State::Stopped;
+    }
     // ---- 64-bit safe fixed-point arithmetic helpers ----
     //
     // UQ20x12 uses a 32-bit internal representation (20 integer + 12 fraction bits).

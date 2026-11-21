@@ -6,6 +6,8 @@
 #include "StepperDriver_ESP32_MCPWM.hpp"
 #include "StepperGenerator.hpp"
 #include "StepperMotor.hpp"
+#include "StepperEndstop_ESP32.hpp"
+#include "StepperAxis_ESP32.hpp"
 
 
 //FastRotaryEncoder encoder(33, 32, 35, 100, 100000, 100);
@@ -20,6 +22,7 @@ Stepper::ESP32::Pin pinDirection(27);
 Stepper::ESP32::MCPWM::Driver driver(pinEnable, pinStep, pinDirection, 16);
 Stepper::Generic::Generator generator(driver);
 Stepper::Generic::Motor motor(generator, 200, 1.0f);
+Stepper::ESP32::RotaryAxis axis(motor);
 
 Stepper::Generic::Motor::MotorTask task;
 

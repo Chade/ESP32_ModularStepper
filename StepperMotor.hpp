@@ -1,6 +1,7 @@
 #ifndef STEPPER_MOTOR_HPP
 #define STEPPER_MOTOR_HPP
 
+#include <cassert>
 #include "StepperGenerator.hpp"
 
 namespace Stepper {
@@ -22,8 +23,11 @@ namespace Generic {
         bool run(const MotorTask& task);
         void run(float targetVelocity, float acceleration, float deceleration, Direction direction);
         void run(float revolutions, float targetVelocity, float acceleration, float deceleration, Direction direction);
-
         
+        void stop() {
+            generator_.stop();
+        };
+
         uint32_t getStepsPerRevolution() const {
             return stepsPerRevolution_;
         };
@@ -64,8 +68,8 @@ namespace Generic {
 
         Generic::Generator& generator_;
         State state_ = State::Undefined;
-        float gearRatio_;
         uint32_t stepsPerRevolution_;
+        float gearRatio_;
         uint32_t stepsPerRevolutionGeared_;
     };
 } // namespace Generic

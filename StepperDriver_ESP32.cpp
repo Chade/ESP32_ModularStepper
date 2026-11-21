@@ -74,9 +74,6 @@ namespace ESP32 {
                 }
             }
         }
-
-        vTaskDelete(self->taskHandle_);
-        self->taskHandle_ = nullptr;
     }
 
     bool Driver::notifyStepDone(bool immidiately) {

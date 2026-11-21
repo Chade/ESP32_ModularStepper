@@ -10,7 +10,11 @@
 // Include project headers using host stubs
 #include "StepperGenerator.hpp"
 #include "StepperDriver_Mock.hpp"
+#include "StepperEndstop_Mock.hpp"
 #include "StepperHelper.hpp"
+#include "StepperMotor.hpp"
+#include "StepperAxis.hpp"
+#include "StepperAxis_Rotary.hpp"
 
 using UQ20x12 = UFixed<20,12>;
 
@@ -225,11 +229,259 @@ void testStepProfileGeneration() {
     printGeneratorState(state);
 }
 
+void testStepperEndstop() {
+    std::cout << "\n=== Testing Stepper Endstop ===" << std::endl;
+
+    Stepper::Mock::Pin pin(15);
+    Stepper::Mock::Endstop endstop(pin);
+
+    printTestResult("Endstop pin number", endstop.getPin().getPin() == 15);
+
+    // Test 1: Callback for both rising and falling edges
+    int risingCount = 0;
+    int fallingCount = 0;
+    endstop.registerCallback([&risingCount, &fallingCount](Stepper::Generic::Endstop::Edge edge, void* ctx) {
+        if (edge == Stepper::Generic::Endstop::Edge::Rising) {
+            risingCount++;
+        } else if (edge == Stepper::Generic::Endstop::Edge::Falling) {
+            fallingCount++;
+        }
+    });
+
+    endstop.simulateEdge(Stepper::Generic::Endstop::Edge::Rising);
+    endstop.simulateEdge(Stepper::Generic::Endstop::Edge::Falling);
+    endstop.simulateEdge(Stepper::Generic::Endstop::Edge::Rising);
+
+    printTestResult("Both-edge callback rising count == 2", risingCount == 2);
+    printTestResult("Both-edge callback falling count == 1", fallingCount == 1);
+
+    // Test 2: Separate callbacks for rising and falling
+    int separateRisingCount = 0;
+    int separateFallingCount = 0;
+    void* ctxRising = reinterpret_cast<void*>(0x1234);
+    void* ctxFalling = reinterpret_cast<void*>(0x5678);
+    void* receivedCtxRising = nullptr;
+    void* receivedCtxFalling = nullptr;
+
+    endstop.registerCallbackOnRising([&separateRisingCount, &receivedCtxRising](Stepper::Generic::Endstop::Edge edge, void* ctx) {
+        separateRisingCount++;
+        receivedCtxRising = ctx;
+    }, ctxRising);
+
+    endstop.registerCallbackOnFalling([&separateFallingCount, &receivedCtxFalling](Stepper::Generic::Endstop::Edge edge, void* ctx) {
+        separateFallingCount++;
+        receivedCtxFalling = ctx;
+    }, ctxFalling);
+
+    endstop.simulateEdge(Stepper::Generic::Endstop::Edge::Rising);
+    printTestResult("Separate callback on rising triggers", separateRisingCount == 1 && separateFallingCount == 0);
+    printTestResult("Separate callback receives rising ctx", receivedCtxRising == ctxRising);
+
+    endstop.simulateEdge(Stepper::Generic::Endstop::Edge::Falling);
+    printTestResult("Separate callback on falling triggers", separateRisingCount == 1 && separateFallingCount == 1);
+    printTestResult("Separate callback receives falling ctx", receivedCtxFalling == ctxFalling);
+
+    // Test 3: SimpleCallback overload (void(Edge))
+    int simpleCallbackCount = 0;
+    endstop.registerCallback([&simpleCallbackCount](Stepper::Generic::Endstop::Edge edge) {
+        simpleCallbackCount++;
+    });
+    endstop.simulateEdge(Stepper::Generic::Endstop::Edge::Rising);
+    endstop.simulateEdge(Stepper::Generic::Endstop::Edge::Falling);
+    printTestResult("SimpleCallback called for both edges", simpleCallbackCount == 2);
+
+    // Test 4: VoidCallback overload (void())
+    int voidRisingCount = 0;
+    endstop.registerCallbackOnRising([&voidRisingCount]() {
+        voidRisingCount++;
+    });
+    endstop.simulateEdge(Stepper::Generic::Endstop::Edge::Rising);
+    endstop.simulateEdge(Stepper::Generic::Endstop::Edge::Falling);
+    printTestResult("VoidCallback called for rising edge only", voidRisingCount == 1);
+
+    // Test 5: Disable suppresses callbacks
+    endstop.disableInterrupt();
+    int countWhileDisabled = voidRisingCount;
+    endstop.simulateEdge(Stepper::Generic::Endstop::Edge::Rising);
+    printTestResult("Disabled endstop suppresses callback", voidRisingCount == countWhileDisabled);
+    endstop.enableInterrupt();
+    endstop.simulateEdge(Stepper::Generic::Endstop::Edge::Rising);
+    printTestResult("Re-enabled endstop triggers callback", voidRisingCount == countWhileDisabled + 1);
+
+    // Test 6: Unregister callbacks
+    endstop.unregisterCallback();
+    int countAfterUnregister = voidRisingCount;
+    endstop.simulateEdge(Stepper::Generic::Endstop::Edge::Rising);
+    endstop.simulateEdge(Stepper::Generic::Endstop::Edge::Falling);
+    printTestResult("Unregistered callback receives no events", voidRisingCount == countAfterUnregister);
+
+    // Test 7: PullMode
+    endstop.setPullMode(Stepper::Generic::Endstop::PullMode::PullDown);
+    printTestResult("PullMode set/get", endstop.getPullMode() == Stepper::Generic::Endstop::PullMode::PullDown);
+
+    // Test 8: Debounce
+    endstop.setDebounceUs(1000);
+    printTestResult("Debounce set/get", endstop.getDebounceUs() == 1000);
+}
+
+void testRotaryAxisHoming() {
+    std::cout << "\n=== Testing Rotary Axis and Homing ===" << std::endl;
+
+    Stepper::Mock::Pin pinEnable(1);
+    Stepper::Mock::Pin pinStep(2);
+    Stepper::Mock::Pin pinDir(3);
+    Stepper::Mock::Driver driver(pinEnable, pinStep, pinDir);
+    Stepper::Generic::Generator generator(driver);
+    Stepper::Generic::Motor motor(generator, 200, 1.0f);
+    Stepper::Generic::RotaryAxis axis(motor, 360.0f, false);
+
+    // 1. Initial State & limits
+    axis.setLimits(-180.0f, 180.0f);
+    printTestResult("RotaryAxis min angle", axis.getMinAngleDeg() == -180.0f);
+    printTestResult("RotaryAxis max angle", axis.getMaxAngleDeg() == 180.0f);
+    printTestResult("RotaryAxis initially not homed", !axis.isHomed());
+    printTestResult("RotaryAxis initially not homing", !axis.isHoming());
+
+    // 2. Endstops attachment
+    Stepper::Mock::Pin pinMin(10);
+    Stepper::Mock::Pin pinMax(11);
+    Stepper::Mock::Endstop endstopMin(pinMin);
+    Stepper::Mock::Endstop endstopMax(pinMax);
+
+    printTestResult("No min endstop initially", !axis.hasEndstopMin());
+    printTestResult("No max endstop initially", !axis.hasEndstopMax());
+
+    // Try homing with no endstop
+    bool homeNoEndstop = axis.homeMin();
+    printTestResult("Homing fails when endstop is not attached", !homeNoEndstop);
+    printTestResult("HomingState is Failed", axis.getHomingState() == Stepper::Generic::Axis::HomingState::Failed);
+
+    axis.setEndstopMin(&endstopMin);
+    axis.setEndstopMax(&endstopMax);
+    printTestResult("Has min endstop after set", axis.hasEndstopMin());
+    printTestResult("Has max endstop after set", axis.hasEndstopMax());
+    printTestResult("getEndstopMin matches", axis.getEndstopMin() == &endstopMin);
+    printTestResult("getEndstopMax matches", axis.getEndstopMax() == &endstopMax);
+
+    // 3. Position tracking
+    axis.setPosition(90.0f);
+    printTestResult("setPosition / getPosition", axis.getPosition() == 90.0f);
+    printTestResult("setPosition / getAngleDeg", axis.getAngleDeg() == 90.0f);
+
+    // 4. Two-Stage Homing Simulation (Min Endstop)
+    Stepper::Generic::Axis::HomingConfig cfg;
+    cfg.endstop = Stepper::Generic::Axis::EndstopPosition::Min;
+    cfg.direction = Stepper::Direction::Counterclockwise;
+    cfg.fastVelocity = 100.0f;
+    cfg.slowVelocity = 20.0f;
+    cfg.acceleration = 200.0f;
+    cfg.deceleration = 200.0f;
+    cfg.retractDistance = 15.0f;
+    cfg.homePosition = -180.0f;
+    cfg.timeoutMs = 1000;
+
+    int yieldCount = 0;
+    axis.setYieldFunction([&axis, &endstopMin, &yieldCount](uint32_t) {
+        yieldCount++;
+        auto state = axis.getHomingState();
+        if (state == Stepper::Generic::Axis::HomingState::FastApproach) {
+            if (yieldCount >= 3) {
+                endstopMin.simulateTrigger(true);
+            }
+        } else if (state == Stepper::Generic::Axis::HomingState::Retracting) {
+            endstopMin.simulateTrigger(false);
+        } else if (state == Stepper::Generic::Axis::HomingState::SlowApproach) {
+            if (yieldCount >= 8) {
+                endstopMin.simulateTrigger(true);
+            }
+        }
+    });
+
+    bool homeSuccess = axis.home(cfg);
+    printTestResult("Two-stage homing Min completes successfully", homeSuccess);
+    printTestResult("Axis is marked homed", axis.isHomed());
+    printTestResult("Axis is not homing after completion", !axis.isHoming());
+    printTestResult("HomingState is Done", axis.getHomingState() == Stepper::Generic::Axis::HomingState::Done);
+    printTestResult("Axis position matches homePosition (-180 deg)", axis.getPosition() == -180.0f);
+    printTestResult("Axis angle matches homePosition", axis.getAngleDeg() == -180.0f);
+
+    // 5. Initial Retract (when endstop is already triggered before starting)
+    endstopMin.simulateTrigger(true);
+    yieldCount = 0;
+    axis.setYieldFunction([&axis, &endstopMin, &yieldCount](uint32_t) {
+        yieldCount++;
+        auto state = axis.getHomingState();
+        if (state == Stepper::Generic::Axis::HomingState::Retracting) {
+            if (yieldCount >= 2) {
+                endstopMin.simulateTrigger(false);
+            }
+        } else if (state == Stepper::Generic::Axis::HomingState::FastApproach) {
+            if (yieldCount >= 5) {
+                endstopMin.simulateTrigger(true);
+            }
+        } else if (state == Stepper::Generic::Axis::HomingState::SlowApproach) {
+            if (yieldCount >= 9) {
+                endstopMin.simulateTrigger(true);
+            }
+        }
+    });
+
+    bool homeFromTriggered = axis.home(cfg);
+    printTestResult("Homing with initially triggered endstop succeeds", homeFromTriggered);
+    printTestResult("Axis homed after initial retract", axis.isHomed());
+
+    // 6. Timeout handling
+    endstopMin.simulateTrigger(false);
+    axis.setYieldFunction([](uint32_t) {
+        // Never trigger endstop
+    });
+    cfg.timeoutMs = 50; // short 50ms timeout
+    bool homeTimeout = axis.home(cfg);
+    printTestResult("Homing times out if endstop is never triggered", !homeTimeout);
+    printTestResult("Axis homingState is Failed after timeout", axis.getHomingState() == Stepper::Generic::Axis::HomingState::Failed);
+
+    // 7. Max Endstop Homing
+    cfg.endstop = Stepper::Generic::Axis::EndstopPosition::Max;
+    cfg.direction = Stepper::Direction::Clockwise;
+    cfg.homePosition = 180.0f;
+    cfg.timeoutMs = 1000;
+    yieldCount = 0;
+    axis.setYieldFunction([&axis, &endstopMax, &yieldCount](uint32_t) {
+        yieldCount++;
+        auto state = axis.getHomingState();
+        if (state == Stepper::Generic::Axis::HomingState::FastApproach) {
+            if (yieldCount >= 3) {
+                endstopMax.simulateTrigger(true);
+            }
+        } else if (state == Stepper::Generic::Axis::HomingState::Retracting) {
+            endstopMax.simulateTrigger(false);
+        } else if (state == Stepper::Generic::Axis::HomingState::SlowApproach) {
+            if (yieldCount >= 7) {
+                endstopMax.simulateTrigger(true);
+            }
+        }
+    });
+
+    bool homeMaxSuccess = axis.home(cfg);
+    printTestResult("Two-stage homing Max completes successfully", homeMaxSuccess);
+    printTestResult("Axis position matches homePosition (+180 deg)", axis.getPosition() == 180.0f);
+
+    // 8. Limit protection
+    axis.enableLimitProtection(true);
+    printTestResult("Limit protection enabled", axis.isLimitProtectionEnabled());
+    driver.start();
+    printTestResult("Driver is running before limit hit", driver.isRunning());
+    endstopMin.simulateTrigger(true);
+    printTestResult("Driver stopped when limit hit", !driver.isRunning());
+}
+
 int main() {
     std::cout << "==========================================" << std::endl;
     std::cout << "   ESP32 Modular Stepper Pure C++ Sandbox  " << std::endl;
     std::cout << "==========================================" << std::endl;
 
+    testStepperEndstop();
+    testRotaryAxisHoming();
     //testEnumHelpers();
     //testStepperGenerator();
     testStepperGeneratorZeroAcc();

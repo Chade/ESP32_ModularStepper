@@ -9,10 +9,11 @@ namespace ESP32 {
     class Pin : public Generic::Pin {
     public:
         Pin() = delete;
-        Pin(int8_t pin, Mode mode = Mode::Input_Output);
-        Pin(uint8_t pin, bool inverse, Mode mode = Mode::Input_Output);
+        Pin(int8_t pin, IoMode mode = IoMode::Input_Output, PullMode pullMode = PullMode::Floating);
+        Pin(uint8_t pin, bool inverse, IoMode mode = IoMode::Input_Output, PullMode pullMode = PullMode::Floating);
 
-        void setup(Mode mode) override;
+        void setIoMode(IoMode mode) override;
+        void setPullMode(PullMode pullMode) override;
         bool isEnabled() const override;
         bool isDisabled() const override;
         void enable() override;

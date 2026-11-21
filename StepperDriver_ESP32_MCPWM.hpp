@@ -39,10 +39,10 @@ namespace MCPWM {
         // with the number of steps done since last update and the new pulse period to apply.
         void update(uint32_t stepsDone, uint32_t stepsToDo, float pulsePeriodNew_us, float pulsePeriodIncrement_us) override;
 
-        static bool comperatorCallbackOnReach(mcpwm_cmpr_handle_t comparator, const mcpwm_compare_event_data_t* edata, void* user_ctx);
-        static bool stepTimerCallbackOnFull(mcpwm_timer_handle_t timer, const mcpwm_timer_event_data_t* edata, void* user_ctx);
-        static bool stepTimerCallbackOnEmpty(mcpwm_timer_handle_t timer, const mcpwm_timer_event_data_t* edata, void* user_ctx);
-        static bool stepTimerCallbackOnStop(mcpwm_timer_handle_t timer, const mcpwm_timer_event_data_t* edata, void* user_ctx);
+        static bool IRAM_ATTR comperatorCallbackOnReach(mcpwm_cmpr_handle_t comparator, const mcpwm_compare_event_data_t* edata, void* user_ctx);
+        static bool IRAM_ATTR stepTimerCallbackOnFull(mcpwm_timer_handle_t timer, const mcpwm_timer_event_data_t* edata, void* user_ctx);
+        static bool IRAM_ATTR stepTimerCallbackOnEmpty(mcpwm_timer_handle_t timer, const mcpwm_timer_event_data_t* edata, void* user_ctx);
+        static bool IRAM_ATTR stepTimerCallbackOnStop(mcpwm_timer_handle_t timer, const mcpwm_timer_event_data_t* edata, void* user_ctx);
 
         const uint8_t timerBaseShift_ = 2;
         const uint32_t timerBaseResolution_ = 250'000;

@@ -1,5 +1,6 @@
 #include "StepperMotor.hpp"
 #include "StepperLog.hpp"
+#include <cassert>
 
 namespace Stepper {
 namespace Generic {

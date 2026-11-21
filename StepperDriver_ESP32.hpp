@@ -25,7 +25,7 @@ namespace ESP32 {
         void forceStepCallback() override;
         
         bool setDirectionQueued(Direction direction);
-        bool setDirectionQueuedFromISR(Direction direction, BaseType_t* pxHigherPriorityTaskWoken = nullptr);
+        bool IRAM_ATTR setDirectionQueuedFromISR(Direction direction, BaseType_t* pxHigherPriorityTaskWoken = nullptr);
 
         uint64_t getStepsFast() const;
         
@@ -36,7 +36,7 @@ namespace ESP32 {
         void update(uint32_t stepsDone, uint32_t stepsToDo, float pulsePeriodNew, float pulsePeriodIncrement) override= 0;
 
         bool notifyStepDone(bool immidiately = false);
-        bool notifyStepDoneFromISR(BaseType_t* pxHigherPriorityTaskWoken, bool immidiately = false);
+        bool IRAM_ATTR notifyStepDoneFromISR(BaseType_t* pxHigherPriorityTaskWoken, bool immidiately = false);
 
         volatile uint32_t isrStepCount_ {0};
         volatile uint32_t isrStepThreshold_ {0};

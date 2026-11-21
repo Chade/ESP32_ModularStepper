@@ -17,13 +17,15 @@ namespace Mock {
                 : Stepper::Generic::Driver(enablePin, stepPin, directionPin, microsteps) {};
 
         virtual void init() {};
-        virtual void start() {};
-        virtual void stop() {};
-        virtual bool isRunning() { return true; };
+        virtual void start() { running_ = true; };
+        virtual void stop() { running_ = false; };
+        virtual bool isRunning() { return running_; };
         virtual void forceStepCallback() {};
         
     protected:
         void update(uint32_t stepsDone, uint32_t stepsToDo, float pulsePeriodNew, float pulsePeriodIncrement) {};
+
+        bool running_ {false};
     };
 } // namespace Mock
 } // namespace Stepper

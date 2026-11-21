@@ -1,28 +1,53 @@
 #ifndef STEPPER_AXIS_ROTARY_HPP
 #define STEPPER_AXIS_ROTARY_HPP
 
+#include <cassert>
+#include "StepperAxis.hpp"
 #include "StepperMotor.hpp"
 
 namespace Stepper {
-namespace Axis {
+namespace Generic {
 
-class RotaryAxis {
+class RotaryAxis : public Generic::Axis {
 public:
     RotaryAxis() = delete;
     RotaryAxis(Generic::Motor& motor, float angleDegPerRevolution = 360.0f, bool continuous = true);
     virtual ~RotaryAxis() = default;
 
     struct RotaryAxisTask {
-        float angle  = 0.0;
-        float velocity = 0.0;
-        float acceleration = 0.0;
-        float deceleration = 0.0;
+        float angle  = 0.0f;
+        float velocity = 0.0f;
+        float acceleration = 0.0f;
+        float deceleration = 0.0f;
         Direction direction = Direction::Neutral;
     };
 
     bool run(const RotaryAxisTask& task);
     void run(float targetVelocity, float acceleration, float deceleration, Direction direction);
     void run(float angle_deg, float targetVelocity, float acceleration, float deceleration, Direction direction);
+
+    // Implementation of Generic::Axis pure virtual motion methods
+    void runVelocity(float velocity, float acceleration, float deceleration, Direction direction) override {
+        run(velocity, acceleration, deceleration, direction);
+    };
+
+    bool runDistance(float distance, float velocity, float acceleration, float deceleration, Direction direction) override {
+        RotaryAxisTask task;
+        task.angle = distance;
+        task.velocity = velocity;
+        task.acceleration = acceleration;
+        task.deceleration = deceleration;
+        task.direction = direction;
+        return run(task);
+    };
+
+    float getPosition() const override {
+        return getAngleDeg();
+    };
+
+    void setPosition(float position) override {
+        setAngleDeg(position);
+    };
 
     void setLimits(float minAngleDeg, float maxAngleDeg) {
         assert(minAngleDeg < maxAngleDeg);
@@ -43,24 +68,19 @@ public:
     };
 
     float getAngleDeg() const {
-        return revolutionsToAngleDeg(motor_.getRevolutions());
+        return revolutionsToAngleDeg(motor_.getRevolutions()) + angleOffsetDeg_;
     };
 
-    State getState() const {
-        return motor_.getState();
-    };
-
-    
-    Generic::Motor& motor() {
-        return motor_;
-    };
-    
-    const Generic::Motor& motor() const {
-        return motor_;
+    void setAngleDeg(float angle_deg) {
+        angleOffsetDeg_ = angle_deg - revolutionsToAngleDeg(motor_.getRevolutions());
     };
 
     bool isContinuous() const {
         return continuous_;
+    };
+
+    float getAngleDegPerRevolution() const {
+        return angleDegPerRevolution_;
     };
 
 private:
@@ -72,15 +92,18 @@ private:
         return revolutions * angleDegPerRevolution_;
     };
 
-    Generic::Motor& motor_;
     float angleDegPerRevolution_;
     bool continuous_;
     float minAngleDeg_ {0.0f};
     float maxAngleDeg_ {360.0f};
-    
+    float angleOffsetDeg_ {0.0f};
 };
 
 } // namespace Generic
+
+namespace Axis {
+    using RotaryAxis = Generic::RotaryAxis;
+} // namespace Axis
 } // namespace Stepper
 
 #endif // STEPPER_AXIS_ROTARY_HPP
