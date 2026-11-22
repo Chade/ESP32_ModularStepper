@@ -1,30 +1,16 @@
 #include "Homing.hpp"
 #include "Log.hpp"
 
-#include <chrono>
-#include <thread>
-
 #if defined(ARDUINO) || defined(ESP32)
-#include <esp_timer.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#else
+#include <chrono>
+#include <thread>
 #endif
 
 namespace Stepper {
 namespace Generic {
-
-uint32_t Homing::getTimeMs() const {
-    if (timeFn_) {
-        return timeFn_();
-    }
-#if defined(ARDUINO) || defined(ESP32)
-    return static_cast<uint32_t>(esp_timer_get_time() / 1000ULL);
-#else
-    using namespace std::chrono;
-    static auto epoch = steady_clock::now();
-    return static_cast<uint32_t>(duration_cast<milliseconds>(steady_clock::now() - epoch).count());
-#endif
-}
 
 void Homing::yieldMs(uint32_t delayMs) const {
     if (yieldFn_) {
@@ -58,12 +44,12 @@ bool Homing::home(Axis& axis, const Config& config) {
     axis.setHoming(true);
     axis.setHomed(false);
 
-    // Determine approach direction
+    // Determine approach and retract directions (Min = -1 -> CW/Backward, Max = +1 -> CCW/Forward)
     Direction searchDir = config.direction;
     if (searchDir == Direction::Neutral) {
         searchDir = (config.endstop == Axis::EndstopPosition::Min)
-                    ? Direction::Counterclockwise
-                    : Direction::Clockwise;
+                    ? Direction::Clockwise
+                    : Direction::Counterclockwise;
     }
 
     Direction retractDir = (searchDir == Direction::Clockwise)
@@ -86,58 +72,50 @@ bool Homing::home(Axis& axis, const Config& config) {
         axis.setHoming(false);
     };
 
-    auto startOverallTime = getTimeMs();
-    auto isTimeout = [&](uint32_t phaseStart) {
-        if (config.timeoutMs == 0) return false;
-        return ((getTimeMs() - phaseStart) >= config.timeoutMs) ||
-               ((getTimeMs() - startOverallTime) >= (config.timeoutMs * 2));
-    };
+    float retractVel = (config.slowVelocity > 0.0f) ? config.slowVelocity : config.fastVelocity;
 
-    // Step 0: Initial retract if already triggered
+    // Step 0: Initial retract if already triggered before homing
     if (targetEndstop->isTriggered()) {
-        LOG_INFO("Endstop already triggered prior to homing, retracting first...");
+        LOG_INFO("Endstop already triggered prior to homing, retracting (%.2f)...", config.retractDistance);
+        if (config.retractDistance <= 0.0f) {
+            LOG_ERROR("Cannot retract: retractDistance must be > 0");
+            cleanupOnFailure();
+            return false;
+        }
         state_ = State::Retracting;
-        float retractVel = (config.slowVelocity > 0.0f) ? config.slowVelocity : config.fastVelocity;
         axis.run(config.retractDistance, retractVel, config.acceleration, config.deceleration, retractDir);
 
-        bool continuousRetract = false;
-        uint32_t retractStart = getTimeMs();
-        while (true) {
-            if (isTimeout(retractStart)) {
-                LOG_ERROR("Initial retract timed out waiting for endstop to release");
-                cleanupOnFailure();
-                return false;
-            }
-            bool triggered = targetEndstop->isTriggered();
-            if (continuousRetract) {
-                if (!triggered) {
-                    break;
-                }
-            } else if (axis.getState() == Stepper::State::Stopped) {
-                if (!triggered) {
-                    break;
-                }
-                continuousRetract = true;
-                axis.run(retractVel, config.acceleration, config.deceleration, retractDir);
-            }
+        while (axis.getState() != Stepper::State::Stopped) {
             yieldMs(1);
         }
         axis.stop();
         yieldMs(20);
+
+        if (targetEndstop->isTriggered()) {
+            LOG_ERROR("Endstop still triggered after initial retract distance (%.2f)", config.retractDistance);
+            cleanupOnFailure();
+            return false;
+        }
     }
 
-    // Phase 1: Fast Approach
+    // Phase 1: Fast Approach (bounded by maxTravelDistance if > 0)
     LOG_INFO("Homing Phase 1: Fast approach...");
     state_ = State::FastApproach;
     endstopTriggered = false;
-    axis.run(config.fastVelocity, config.acceleration, config.deceleration, searchDir);
+    if (config.maxTravelDistance > 0.0f) {
+        axis.run(config.maxTravelDistance, config.fastVelocity, config.acceleration, config.deceleration, searchDir);
+    } else {
+        axis.run(config.fastVelocity, config.acceleration, config.deceleration, searchDir);
+    }
 
-    uint32_t phase1Start = getTimeMs();
     while (!endstopTriggered && !targetEndstop->isTriggered()) {
-        if (isTimeout(phase1Start)) {
-            LOG_ERROR("Homing fast approach timed out");
-            cleanupOnFailure();
-            return false;
+        if (axis.getState() == Stepper::State::Stopped) {
+            if (!endstopTriggered && !targetEndstop->isTriggered()) {
+                LOG_ERROR("Homing fast approach exceeded max travel distance (%.2f)", config.maxTravelDistance);
+                cleanupOnFailure();
+                return false;
+            }
+            break;
         }
         yieldMs(1);
     }
@@ -145,50 +123,43 @@ bool Homing::home(Axis& axis, const Config& config) {
     yieldMs(20);
 
     // Phase 2: Retract / Back-off
-    LOG_INFO("Homing Phase 2: Retracting...");
-    state_ = State::Retracting;
-    float retractVel = (config.slowVelocity > 0.0f) ? config.slowVelocity : config.fastVelocity;
-    axis.run(config.retractDistance, retractVel, config.acceleration, config.deceleration, retractDir);
+    LOG_INFO("Homing Phase 2: Retracting (%.2f)...", config.retractDistance);
+    if (config.retractDistance > 0.0f) {
+        state_ = State::Retracting;
+        axis.run(config.retractDistance, retractVel, config.acceleration, config.deceleration, retractDir);
 
-    bool continuousRetract = false;
-    uint32_t phase2Start = getTimeMs();
-    while (true) {
-        if (isTimeout(phase2Start)) {
-            LOG_ERROR("Homing retract timed out");
+        while (axis.getState() != Stepper::State::Stopped) {
+            yieldMs(1);
+        }
+        axis.stop();
+        yieldMs(20);
+
+        if (targetEndstop->isTriggered()) {
+            LOG_ERROR("Endstop still triggered after retract distance (%.2f)", config.retractDistance);
             cleanupOnFailure();
             return false;
         }
-        bool triggered = targetEndstop->isTriggered();
-        if (continuousRetract) {
-            // In continuous back-off mode: stop as soon as endstop releases
-            if (!triggered) {
-                break;
-            }
-        } else if (axis.getState() == Stepper::State::Stopped) {
-            if (!triggered) {
-                break; // Retract distance completed and endstop is clear
-            }
-            // Endstop still triggered after retractDistance: continue backing off until released
-            continuousRetract = true;
-            axis.run(retractVel, config.acceleration, config.deceleration, retractDir);
-        }
-        yieldMs(1);
     }
-    axis.stop();
-    yieldMs(20);
 
-    // Phase 3: Slow Approach (Latch)
+    // Phase 3: Slow Approach (Latch), bounded by 2x retractDistance (or maxTravelDistance)
     LOG_INFO("Homing Phase 3: Slow latch approach...");
     state_ = State::SlowApproach;
     endstopTriggered = false;
-    axis.run(config.slowVelocity, config.acceleration, config.deceleration, searchDir);
+    float slowMaxDistance = (config.retractDistance > 0.0f) ? (config.retractDistance * 2.0f) : config.maxTravelDistance;
+    if (slowMaxDistance > 0.0f) {
+        axis.run(slowMaxDistance, config.slowVelocity, config.acceleration, config.deceleration, searchDir);
+    } else {
+        axis.run(config.slowVelocity, config.acceleration, config.deceleration, searchDir);
+    }
 
-    uint32_t phase3Start = getTimeMs();
     while (!endstopTriggered && !targetEndstop->isTriggered()) {
-        if (isTimeout(phase3Start)) {
-            LOG_ERROR("Homing slow latch approach timed out");
-            cleanupOnFailure();
-            return false;
+        if (axis.getState() == Stepper::State::Stopped) {
+            if (!endstopTriggered && !targetEndstop->isTriggered()) {
+                LOG_ERROR("Homing slow latch exceeded max distance (%.2f)", slowMaxDistance);
+                cleanupOnFailure();
+                return false;
+            }
+            break;
         }
         yieldMs(1);
     }
@@ -204,30 +175,17 @@ bool Homing::home(Axis& axis, const Config& config) {
         state_ = State::BackingOff;
         axis.run(config.backoffDistance, retractVel, config.acceleration, config.deceleration, retractDir);
 
-        bool continuousBackoff = false;
-        uint32_t phase4Start = getTimeMs();
-        while (true) {
-            if (isTimeout(phase4Start)) {
-                LOG_ERROR("Homing final back-off timed out");
-                cleanupOnFailure();
-                return false;
-            }
-            bool triggered = targetEndstop->isTriggered();
-            if (continuousBackoff) {
-                if (!triggered) {
-                    break;
-                }
-            } else if (axis.getState() == Stepper::State::Stopped) {
-                if (!triggered) {
-                    break;
-                }
-                continuousBackoff = true;
-                axis.run(retractVel, config.acceleration, config.deceleration, retractDir);
-            }
+        while (axis.getState() != Stepper::State::Stopped) {
             yieldMs(1);
         }
         axis.stop();
         yieldMs(20);
+
+        if (targetEndstop->isTriggered()) {
+            LOG_ERROR("Endstop still triggered after final back-off distance (%.2f)", config.backoffDistance);
+            cleanupOnFailure();
+            return false;
+        }
     }
 
     targetEndstop->unregisterCallback();

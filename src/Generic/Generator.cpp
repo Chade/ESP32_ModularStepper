@@ -474,20 +474,22 @@ namespace Generic {
             if (state.currentDirection == state.targetDirection) {
                 state.stepsDone += steps;
                 // Determine phase by stepsDone
-                if (state.stepsDone < state.stepsAcc) {
-                    // Accelerating
-                }
-                else if (state.stepsDone <= (state.stepsAcc + state.stepsConst)) {
-                    // Constant
-                    state.currentVelocity = state.targetVelocity;
-                } else if (state.stepsDone < (state.stepsAcc + state.stepsConst + state.stepsDec)) {
-                    // Decelerating
-                    state.targetVelocity = 0;
-                } else if (state.stepsDone >= state.stepsTotal) {
+                if (state.stepsDone >= state.stepsTotal) {
                     // Stopping
                     LOG_INFO("Target steps reached [%llu/%llu/%lu]", state.stepsDone, state.stepsTotal, steps);
                     state.targetVelocity = 0;
                     state.currentVelocity = 0;
+                }
+                else if (state.stepsDone < state.stepsAcc) {
+                    // Accelerating
+                }
+                else if (state.stepsDone < (state.stepsAcc + state.stepsConst)) {
+                    // Constant
+                    state.currentVelocity = state.targetVelocity;
+                }
+                else {
+                    // Decelerating
+                    state.targetVelocity = 0;
                 }
             }
         }

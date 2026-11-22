@@ -108,8 +108,8 @@ void setup() {
   homingCfg.deceleration = 20.0f;      // 20 deg/s^2
   homingCfg.retractDistance = 5.0f;    // 5 deg back-off between fast & slow approach
   homingCfg.backoffDistance = 90.0f;    // 90 deg final pull-off so motor doesn't rest on switch
+  homingCfg.maxTravelDistance = 95.0f; // abort if switch not found within 1 full revolution
   homingCfg.homePosition = 0.0f;
-  homingCfg.timeoutMs = 30000;         // 30 s timeout
   homing.setConfig(homingCfg);
 
   // Uncomment to start async homing on startup:

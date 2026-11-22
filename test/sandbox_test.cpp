@@ -374,15 +374,15 @@ void testRotaryAxisHoming() {
     // 4. Two-Stage Homing Simulation (Min Endstop)
     Stepper::Generic::Homing::Config cfg;
     cfg.endstop = Stepper::Generic::Axis::EndstopPosition::Min;
-    cfg.direction = Stepper::Direction::Counterclockwise;
+    cfg.direction = Stepper::Direction::Neutral; // Auto: Min -> CW (-1), retract -> CCW (+1)
     cfg.fastVelocity = 100.0f;
     cfg.slowVelocity = 20.0f;
     cfg.acceleration = 200.0f;
     cfg.deceleration = 200.0f;
     cfg.retractDistance = 15.0f;
     cfg.backoffDistance = 5.0f;
+    cfg.maxTravelDistance = 360.0f;
     cfg.homePosition = -180.0f;
-    cfg.timeoutMs = 1000;
 
     bool sawBackingOff = false;
     int yieldCount = 0;
@@ -402,13 +402,14 @@ void testRotaryAxisHoming() {
             }
         } else if (state == Stepper::Generic::Homing::State::BackingOff) {
             sawBackingOff = true;
-            // Simulate stepping the full backoffDistance (5 deg of 360 deg @ 200 steps/rev -> ~2 steps)
-            uint32_t totalSteps = static_cast<uint32_t>(generator.getState().stepsTotal);
-            if (totalSteps > 0) {
-                generator.advanceStateAfterStep(totalSteps);
+            if (axis.getState() != Stepper::State::Stopped) {
+                uint32_t totalSteps = static_cast<uint32_t>(generator.getState().stepsTotal);
+                if (totalSteps > 0) {
+                    generator.advanceStateAfterStep(totalSteps);
+                }
+                endstopMin.simulateTrigger(false);
+                axis.stop();
             }
-            endstopMin.simulateTrigger(false);
-            axis.stop();
         }
     });
 
@@ -451,21 +452,25 @@ void testRotaryAxisHoming() {
     printTestResult("Homing with initially triggered endstop succeeds", homeFromTriggered);
     printTestResult("Axis homed after initial retract", axis.isHomed());
 
-    // 6. Timeout handling
+    // 6. Max travel distance abort handling (endstop never triggered)
     endstopMin.simulateTrigger(false);
-    homing.setYieldFunction([](uint32_t) {
-        // Never trigger endstop
+    yieldCount = 0;
+    homing.setYieldFunction([&axis, &yieldCount](uint32_t) {
+        yieldCount++;
+        if (yieldCount >= 5) {
+            // Simulate maxTravelDistance move completing without hitting endstop
+            axis.stop();
+        }
     });
-    cfg.timeoutMs = 50; // short 50ms timeout
-    bool homeTimeout = homing.home(axis, cfg);
-    printTestResult("Homing times out if endstop is never triggered", !homeTimeout);
-    printTestResult("Homing state is Failed after timeout", homing.getState() == Stepper::Generic::Homing::State::Failed);
+    bool homeMaxTravelAbort = homing.home(axis, cfg);
+    printTestResult("Homing aborts if maxTravelDistance exceeded without trigger", !homeMaxTravelAbort);
+    printTestResult("Homing state is Failed after maxTravelDistance abort", homing.getState() == Stepper::Generic::Homing::State::Failed);
 
     // 7. Max Endstop Homing
     cfg.endstop = Stepper::Generic::Axis::EndstopPosition::Max;
     cfg.direction = Stepper::Direction::Clockwise;
     cfg.homePosition = 180.0f;
-    cfg.timeoutMs = 1000;
+    cfg.maxTravelDistance = 360.0f;
     yieldCount = 0;
     homing.setYieldFunction([&axis, &homing, &endstopMax, &yieldCount](uint32_t) {
         yieldCount++;
@@ -500,6 +505,50 @@ void testRotaryAxisHoming() {
     printTestResult("Driver stopped when limit hit", !driver.isRunning());
 }
 
+void testStepCountExactness() {
+    std::cout << "\n=== Testing Step Count Exactness (90 deg @ 200 steps/rev x 16 microsteps) ===" << std::endl;
+
+    Stepper::Mock::Pin pinEnable(1);
+    Stepper::Mock::Pin pinStep(2);
+    Stepper::Mock::Pin pinDir(3);
+    Stepper::Mock::Driver driver(pinEnable, pinStep, pinDir, 16);
+    Stepper::Generic::Generator generator(driver);
+    Stepper::Generic::Motor motor(generator, 200, 1.0f);
+    Stepper::Generic::RotaryAxis axis(motor, 360.0f, true);
+
+    // Exact homing back-off parameters: 90 deg at 2 deg/s, acc=20 deg/s^2, dec=20 deg/s^2
+    axis.setPosition(0.0f);
+    axis.run(90.0f, 2.0f, 20.0f, 20.0f, Stepper::Direction::Counterclockwise);
+
+    uint32_t executedSteps = 0;
+    while (axis.getState() != Stepper::State::Stopped && executedSteps < 1000) {
+        generator.advanceStateAfterStep(1);
+        executedSteps++;
+    }
+
+    auto state = generator.getState();
+    std::cout << "  Profile: [" << state.stepsAcc << "|" << state.stepsConst << "|" << state.stepsDec << "] total=" << state.stepsTotal << std::endl;
+    std::cout << "  Executed steps: " << executedSteps << " | positionSteps: " << state.positionSteps
+              << " | angle: " << std::fixed << std::setprecision(4) << axis.getAngleDeg() << " deg" << std::endl;
+
+    printTestResult("90 deg slow move executes exactly 800 microsteps", executedSteps == 800);
+    printTestResult("90 deg slow move final angle == 90.0 deg", std::abs(axis.getAngleDeg() - 90.0f) < 0.001f);
+
+    // Also verify faster trapezoid move (stepsAcc > 0, stepsDec > 0)
+    axis.setPosition(0.0f);
+    axis.run(90.0f, 180.0f, 100.0f, 100.0f, Stepper::Direction::Counterclockwise);
+    executedSteps = 0;
+    while (axis.getState() != Stepper::State::Stopped && executedSteps < 1000) {
+        generator.advanceStateAfterStep(1);
+        executedSteps++;
+    }
+    state = generator.getState();
+    std::cout << "  Trapezoid profile: [" << state.stepsAcc << "|" << state.stepsConst << "|" << state.stepsDec << "] total=" << state.stepsTotal << std::endl;
+    std::cout << "  Executed steps: " << executedSteps << " | angle: " << axis.getAngleDeg() << " deg" << std::endl;
+    printTestResult("90 deg trapezoid move executes exactly 800 microsteps", executedSteps == 800);
+    printTestResult("90 deg trapezoid move final angle == 90.0 deg", std::abs(axis.getAngleDeg() - 90.0f) < 0.001f);
+}
+
 int main() {
     std::cout << "==========================================" << std::endl;
     std::cout << "   ESP32 Modular Stepper Pure C++ Sandbox  " << std::endl;
@@ -507,6 +556,7 @@ int main() {
 
     testStepperEndstop();
     testRotaryAxisHoming();
+    testStepCountExactness();
     //testEnumHelpers();
     //testStepperGenerator();
     testStepperGeneratorZeroAcc();

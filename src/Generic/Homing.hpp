@@ -30,12 +30,11 @@ public:
         float deceleration = 100.0f;      // in axis units/s^2
         float retractDistance = 5.0f;     // distance to back off between fast and slow approach in axis units
         float backoffDistance = 0.0f;     // distance to pull off the switch after final latch in axis units (0 = stay on switch)
-        float homePosition = 0.0f;        // coordinate assigned at final home position
-        uint32_t timeoutMs = 15000;       // max time in ms (0 = disabled)
+        float maxTravelDistance = 0.0f;   // max search distance in axis units before aborting (0 = unlimited)
+        float homePosition = 0.0f;        // coordinate assigned at the endstop trigger point
     };
 
     using YieldFn = std::function<void(uint32_t delayMs)>;
-    using TimeFn = std::function<uint32_t()>;
 
     Homing() = default;
     explicit Homing(const Config& defaultConfig) : config_(defaultConfig) {};
@@ -59,12 +58,10 @@ public:
     bool homeMin(Axis& axis);
     bool homeMax(Axis& axis);
 
-    // Custom time & yield hooks (for host sandbox testing vs RTOS)
+    // Custom yield hook (used on host sandbox testing; defaults to vTaskDelay on ESP32)
     void setYieldFunction(YieldFn fn) { yieldFn_ = std::move(fn); };
-    void setTimeFunction(TimeFn fn) { timeFn_ = std::move(fn); };
 
 protected:
-    uint32_t getTimeMs() const;
     void yieldMs(uint32_t delayMs) const;
     static void restoreLimitProtection(Axis& axis, Axis::EndstopPosition pos);
 
@@ -72,7 +69,6 @@ protected:
     State state_ {State::Idle};
 
     YieldFn yieldFn_ {nullptr};
-    TimeFn timeFn_ {nullptr};
 };
 
 } // namespace Generic
