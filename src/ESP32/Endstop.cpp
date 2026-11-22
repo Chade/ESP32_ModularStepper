@@ -6,6 +6,34 @@ namespace ESP32 {
 
 Endstop::Endstop(Generic::Pin& pin)
         : Generic::Endstop(pin) {
+    // Hardware/FreeRTOS initialization is deferred to init() (called lazily on enableInterrupt())
+    // because global C++ constructors run before FreeRTOS and ESP-IDF IPC tasks are started.
+}
+
+Endstop::~Endstop() {
+    if (initialized_) {
+        gpio_num_t gpioNum = static_cast<gpio_num_t>(pin_.getPin());
+        gpio_intr_disable(gpioNum);
+        gpio_isr_handler_remove(gpioNum);
+
+        if (taskHandle_ != nullptr) {
+            vTaskDelete(taskHandle_);
+            taskHandle_ = nullptr;
+        }
+        if (eventQueue_ != nullptr) {
+            vQueueDelete(eventQueue_);
+            eventQueue_ = nullptr;
+        }
+        initialized_ = false;
+        enabled_ = false;
+    }
+}
+
+void Endstop::init() {
+    if (initialized_) {
+        return;
+    }
+
     gpio_num_t gpioNum = static_cast<gpio_num_t>(pin_.getPin());
 
     eventQueue_ = xQueueCreate(16, sizeof(Edge));
@@ -20,9 +48,9 @@ Endstop::Endstop(Generic::Pin& pin)
         1
     );
 
-    // Ignore error if already installed
+    // Ignore error if ISR service is already installed
     esp_err_t err = gpio_install_isr_service(0);
-    if (err != ESP_ERR_INVALID_STATE) {
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
         ESP_ERROR_CHECK(err);
     }
 
@@ -30,19 +58,15 @@ Endstop::Endstop(Generic::Pin& pin)
     ESP_ERROR_CHECK(gpio_isr_handler_add(gpioNum, Endstop::isrHandler, this));
     // Default to disabled until enableInterrupt() is called
     ESP_ERROR_CHECK(gpio_intr_disable(gpioNum));
+
     enabled_ = false;
-}
-
-Endstop::~Endstop() {
-    gpio_num_t gpioNum = static_cast<gpio_num_t>(pin_.getPin());
-    gpio_intr_disable(gpioNum);
-    gpio_isr_handler_remove(gpioNum);
-
-    vTaskDelete(taskHandle_);
-    vQueueDelete(eventQueue_);
+    initialized_ = true;
 }
 
 void Endstop::enableInterrupt() {
+    if (!initialized_) {
+        init();
+    }
     if (!enabled_) {
         ESP_ERROR_CHECK(gpio_intr_enable(static_cast<gpio_num_t>(pin_.getPin())));
         enabled_ = true;
@@ -50,7 +74,7 @@ void Endstop::enableInterrupt() {
 }
 
 void Endstop::disableInterrupt() {
-    if (enabled_) {
+    if (initialized_ && enabled_) {
         ESP_ERROR_CHECK(gpio_intr_disable(static_cast<gpio_num_t>(pin_.getPin())));
         enabled_ = false;
     }

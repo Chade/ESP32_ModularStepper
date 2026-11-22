@@ -54,6 +54,9 @@ namespace Generic {
             UQ20x12 acceleration    = 0.0; // steps/s^2
             UQ20x12 deceleration    = 0.0; // steps/s^2
 
+            // Cumulative signed position across both step and velocity modes
+            int64_t positionSteps = 0;
+
             // Distance mode state
             uint64_t stepsTotal = 0; // total steps requested
             uint64_t stepsDone  = 0; // steps already executed
@@ -88,6 +91,9 @@ namespace Generic {
             state_.acceleration    = 0.0; // steps/s^2
             state_.deceleration    = 0.0; // steps/s^2
 
+            // Position state
+            state_.positionSteps = 0;
+
             // Distance mode state
             state_.stepsTotal = 0; // total steps requested
             state_.stepsDone  = 0; // steps already executed
@@ -104,6 +110,14 @@ namespace Generic {
 
         uint64_t getStepsDone() const {
             return state_.stepsDone;
+        };
+
+        int64_t getPositionSteps() const {
+            return state_.positionSteps;
+        };
+
+        void setPositionSteps(int64_t steps) {
+            state_.positionSteps = steps;
         };
 
         Driver& getDriver() {

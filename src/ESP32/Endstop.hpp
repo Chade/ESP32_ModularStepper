@@ -20,6 +20,7 @@ public:
     Endstop(Generic::Pin& pin);
     ~Endstop() override;
 
+    void init();
     void enableInterrupt() override;
     void disableInterrupt() override;
 
@@ -27,8 +28,7 @@ protected:
     static void IRAM_ATTR isrHandler(void* args);
     static void task(void* args);
 
-    static inline uint32_t isrServiceRefCount_ {0};
-
+    bool initialized_ {false};
     bool enabled_ {false};
 
     QueueHandle_t eventQueue_ {nullptr};

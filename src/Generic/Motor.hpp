@@ -2,6 +2,7 @@
 #define STEPPER_MOTOR_HPP
 
 #include <cassert>
+#include <cmath>
 #include "Generator.hpp"
 
 namespace Stepper {
@@ -41,7 +42,11 @@ namespace Generic {
         };
 
         float getRevolutions() const {
-            return stepsToRevolutions(generator_.getStepsDone());
+            return stepsToRevolutions(static_cast<float>(generator_.getPositionSteps()));
+        };
+
+        void setRevolutions(float revolutions) {
+            generator_.setPositionSteps(static_cast<int64_t>(std::llround(revolutionsToSteps(revolutions))));
         };
 
         State getState() const {

@@ -83,8 +83,11 @@ namespace Generic {
     }
 
     void Generator::stop() {
+        state_.updateState(State::Stopped);
         driver_.stop();
-        state_.currentState = State::Stopped;
+        state_.currentVelocity = 0.0;
+        state_.targetVelocity = 0.0;
+        state_.doDirectionChange = false;
     }
     // ---- 64-bit safe fixed-point arithmetic helpers ----
     //
@@ -464,6 +467,9 @@ namespace Generic {
             state.currentVelocity = 0;
         }
 
+        // Update position based on steps taken and current direction
+        state.positionSteps += static_cast<int64_t>(steps) * cast_enum_to_base(state.currentDirection);
+
         if (state.stepsTotal > 0) {
             if (state.currentDirection == state.targetDirection) {
                 state.stepsDone += steps;
@@ -490,7 +496,7 @@ namespace Generic {
             // Need to change direction: decelerate to stand-still first
             if (state.currentVelocity > 0) {
                 state.updateState(State::Decelerating);
-                state.currentVelocity = computeVelocity(state.deceleration, state.currentVelocity, state.targetVelocity, steps);
+                state.currentVelocity = computeVelocity(state.deceleration, state.currentVelocity, UQ20x12(0), steps);
             }
             if (state.currentVelocity == 0) {
                 LOG_INFO("Do direction change");
@@ -584,6 +590,13 @@ namespace Generic {
 
     void Generator::callbackOnStepDone(uint32_t stepsDone, uint32_t& stepsToDo, float& pulsePeriod_us, float& pulsePeriodIncrement_us, void* user_ctx) {
         Generator* self = static_cast<Generator*>(user_ctx);
+
+        // Ignore late ISR notifications after an explicit stop()
+        if (self->state_.currentState == State::Stopped) {
+            stepsToDo = 0;
+            pulsePeriod_us = 0.0f;
+            return;
+        }
 
         // The driver only calls us when the batch threshold is reached.
         // Always recalculate velocity for the accumulated step batch.

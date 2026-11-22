@@ -124,6 +124,14 @@ namespace ESP32 {
         isrStepThreshold_ = 0; // next ISR step will trigger a callback
     }
 
+    void Driver::reset(bool resetSteps) {
+        Generic::Driver::reset(resetSteps);
+        portENTER_CRITICAL(&stepCountMux_);
+        isrStepCount_ = 0;
+        isrStepThreshold_ = 0;
+        portEXIT_CRITICAL(&stepCountMux_);
+    }
+
     bool Driver::setDirectionQueued(Direction direction) {
         Notification notification;
         notification.data.doDirectionChange = 1;

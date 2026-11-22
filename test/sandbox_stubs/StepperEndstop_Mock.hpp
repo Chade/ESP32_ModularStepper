@@ -18,6 +18,9 @@ public:
     bool isInterruptEnabled() const { return enabled_; }
 
     void simulateEdge(Edge edge) {
+        if (!enabled_) {
+            return;
+        }
         triggerCallback(edge);
     }
 

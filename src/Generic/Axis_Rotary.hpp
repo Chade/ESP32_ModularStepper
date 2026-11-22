@@ -8,7 +8,7 @@
 namespace Stepper {
 namespace Generic {
 
-class RotaryAxis : public virtual Generic::Axis {
+class RotaryAxis : public Generic::Axis {
 public:
     RotaryAxis() = delete;
     RotaryAxis(Generic::Motor& motor, float angleDegPerRevolution = 360.0f, bool continuous = true);
@@ -53,11 +53,11 @@ public:
     };
 
     float getAngleDeg() const {
-        return revolutionsToAngleDeg(motor_.getRevolutions()) + angleOffsetDeg_;
+        return revolutionsToAngleDeg(motor_.getRevolutions());
     };
 
     void setAngleDeg(float angle_deg) {
-        angleOffsetDeg_ = angle_deg - revolutionsToAngleDeg(motor_.getRevolutions());
+        motor_.setRevolutions(angleDegToRevolutions(angle_deg));
     };
 
     bool isContinuous() const {
@@ -81,7 +81,6 @@ private:
     bool continuous_;
     float minAngleDeg_ {0.0f};
     float maxAngleDeg_ {360.0f};
-    float angleOffsetDeg_ {0.0f};
 };
 
 } // namespace Generic

@@ -26,6 +26,7 @@ g++ -std=c++17 -Wall -Wextra -Wno-unused-parameter -Wno-format \
     "$PROJECT_DIR/src/Generic/Motor.cpp" \
     "$PROJECT_DIR/src/Generic/Axis.cpp" \
     "$PROJECT_DIR/src/Generic/Axis_Rotary.cpp" \
+    "$PROJECT_DIR/src/Generic/Homing.cpp" \
     sandbox_test.cpp -o "$TARGET"
 
 echo "[EXEC] Running $TARGET..."

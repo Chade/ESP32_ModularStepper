@@ -23,6 +23,7 @@ namespace ESP32 {
         void stop() override = 0;
         bool isRunning() override = 0;
         void forceStepCallback() override;
+        void reset(bool resetSteps = false) override;
         
         bool setDirectionQueued(Direction direction);
         bool IRAM_ATTR setDirectionQueuedFromISR(Direction direction, BaseType_t* pxHigherPriorityTaskWoken = nullptr);

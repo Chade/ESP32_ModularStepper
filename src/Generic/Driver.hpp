@@ -44,7 +44,7 @@ namespace Generic {
         uint64_t getSteps() const;
 
         void resetSteps(uint64_t count = 0);
-        void reset(bool resetSteps = false);
+        virtual void reset(bool resetSteps = false);
         
         // Register a callback to calculate the next pulse period, based on current pulse period and the steps done since last call.
         // The callback should return the number of steps for the next batch, and update pulsePeriod_us to the new value to apply for the next batch.

@@ -1,18 +1,26 @@
-#include "Axis.hpp"
+#include "Homing.hpp"
 #include "../Generic/Log.hpp"
 
 namespace Stepper {
 namespace ESP32 {
 
-Axis::Axis(Generic::Motor& motor)
-    : Generic::Axis(motor) {
+Homing::Homing()
+    : Generic::Homing() {
     homingDoneSem_ = xSemaphoreCreateBinary();
     if (homingDoneSem_ != nullptr) {
         xSemaphoreGive(homingDoneSem_);
     }
 }
 
-Axis::~Axis() {
+Homing::Homing(const Config& defaultConfig)
+    : Generic::Homing(defaultConfig) {
+    homingDoneSem_ = xSemaphoreCreateBinary();
+    if (homingDoneSem_ != nullptr) {
+        xSemaphoreGive(homingDoneSem_);
+    }
+}
+
+Homing::~Homing() {
     abortHoming();
     if (homingDoneSem_ != nullptr) {
         vSemaphoreDelete(homingDoneSem_);
@@ -20,19 +28,21 @@ Axis::~Axis() {
     }
 }
 
-bool Axis::homeAsync(const HomingConfig& config, HomingCallback callback) {
-    if (isHoming_) {
+bool Homing::homeAsync(Generic::Axis& axis, const Config& config, HomingCallback callback) {
+    if (isHoming() || homingTaskHandle_ != nullptr) {
         LOG_WARN("Homing is already in progress");
         return false;
     }
 
-    if (!hasEndstop(config.endstop)) {
+    if (!axis.hasEndstop(config.endstop)) {
         LOG_WARN("Cannot start async homing: Target endstop not attached");
         return false;
     }
 
+    activeAxis_ = &axis;
     homingCallback_ = std::move(callback);
     pendingConfig_ = config;
+    lastResult_ = false;
 
     // Reset completion semaphore before starting
     if (homingDoneSem_ != nullptr) {
@@ -40,7 +50,7 @@ bool Axis::homeAsync(const HomingConfig& config, HomingCallback callback) {
     }
 
     BaseType_t res = xTaskCreatePinnedToCore(
-        Axis::homingTask,
+        Homing::homingTask,
         "AxisHoming",
         4096,
         this,
@@ -51,6 +61,7 @@ bool Axis::homeAsync(const HomingConfig& config, HomingCallback callback) {
 
     if (res != pdPASS) {
         LOG_ERROR("Failed to create FreeRTOS homing task");
+        activeAxis_ = nullptr;
         if (homingDoneSem_ != nullptr) {
             xSemaphoreGive(homingDoneSem_);
         }
@@ -60,19 +71,19 @@ bool Axis::homeAsync(const HomingConfig& config, HomingCallback callback) {
     return true;
 }
 
-bool Axis::homeAsync(EndstopPosition pos, HomingCallback callback) {
-    HomingConfig cfg = homingConfig_;
+bool Homing::homeAsync(Generic::Axis& axis, Generic::Axis::EndstopPosition pos, HomingCallback callback) {
+    Config cfg = config_;
     cfg.endstop = pos;
-    return homeAsync(cfg, std::move(callback));
+    return homeAsync(axis, cfg, std::move(callback));
 }
 
-bool Axis::homeAsync(HomingCallback callback) {
-    return homeAsync(homingConfig_.endstop, std::move(callback));
+bool Homing::homeAsync(Generic::Axis& axis, HomingCallback callback) {
+    return homeAsync(axis, config_.endstop, std::move(callback));
 }
 
-bool Axis::waitForHoming(uint32_t timeoutMs) {
-    if (!isHoming_ && homingTaskHandle_ == nullptr) {
-        return isHomed_;
+bool Homing::waitForHoming(uint32_t timeoutMs) {
+    if (!isHoming() && homingTaskHandle_ == nullptr) {
+        return lastResult_;
     }
 
     if (homingDoneSem_ == nullptr) {
@@ -82,25 +93,35 @@ bool Axis::waitForHoming(uint32_t timeoutMs) {
     TickType_t ticks = (timeoutMs == portMAX_DELAY) ? portMAX_DELAY : pdMS_TO_TICKS(timeoutMs);
     if (xSemaphoreTake(homingDoneSem_, ticks) == pdTRUE) {
         xSemaphoreGive(homingDoneSem_);
-        return isHomed_;
+        return lastResult_;
     }
 
     LOG_WARN("waitForHoming timed out");
     return false;
 }
 
-void Axis::abortHoming() {
-    if (isHoming_ || homingTaskHandle_ != nullptr) {
+void Homing::abortHoming() {
+    if (isHoming() || homingTaskHandle_ != nullptr) {
         LOG_INFO("Aborting active homing sequence");
-        stop();
 
         if (homingTaskHandle_ != nullptr) {
             vTaskDelete(homingTaskHandle_);
             homingTaskHandle_ = nullptr;
         }
 
-        isHoming_ = false;
-        homingState_ = HomingState::Failed;
+        if (activeAxis_ != nullptr) {
+            activeAxis_->stop();
+            Generic::Endstop* targetEndstop = activeAxis_->getEndstop(pendingConfig_.endstop);
+            if (targetEndstop != nullptr) {
+                targetEndstop->unregisterCallback();
+            }
+            restoreLimitProtection(*activeAxis_, pendingConfig_.endstop);
+            activeAxis_->setHoming(false);
+            activeAxis_ = nullptr;
+        }
+
+        state_ = State::Failed;
+        lastResult_ = false;
 
         if (homingCallback_) {
             auto cb = std::move(homingCallback_);
@@ -113,11 +134,17 @@ void Axis::abortHoming() {
     }
 }
 
-void Axis::homingTask(void* args) {
-    Axis* self = static_cast<Axis*>(args);
+void Homing::homingTask(void* args) {
+    Homing* self = static_cast<Homing*>(args);
 
     LOG_INFO("FreeRTOS homing task started");
-    bool success = self->home(self->pendingConfig_);
+    bool success = false;
+    if (self->activeAxis_ != nullptr) {
+        success = self->home(*self->activeAxis_, self->pendingConfig_);
+    }
+
+    self->lastResult_ = success;
+    self->activeAxis_ = nullptr;
 
     if (self->homingCallback_) {
         auto cb = std::move(self->homingCallback_);

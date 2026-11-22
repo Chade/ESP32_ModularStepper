@@ -7,7 +7,8 @@
 #include "src/Generic/Generator.hpp"
 #include "src/Generic/Motor.hpp"
 #include "src/ESP32/Endstop.hpp"
-#include "src/ESP32/Axis_Rotary.hpp"
+#include "src/Generic/Axis_Rotary.hpp"
+#include "src/ESP32/Homing.hpp"
 
 
 //FastRotaryEncoder encoder(33, 32, 35, 100, 100000, 100);
@@ -19,10 +20,17 @@ Stepper::ESP32::Pin pinEnable(25);
 Stepper::ESP32::Pin pinStep(26);
 Stepper::ESP32::Pin pinDirection(27);
 
+// Endstop pins on GPIO 22 (Min) & GPIO 23 (Max), active-low (inverse=true) with internal pull-up
+Stepper::ESP32::Pin pinEndstopMin(22, true, Stepper::Generic::Pin::IoMode::Input, Stepper::Generic::Pin::PullMode::PullUp);
+Stepper::ESP32::Pin pinEndstopMax(23, true, Stepper::Generic::Pin::IoMode::Input, Stepper::Generic::Pin::PullMode::PullUp);
+Stepper::ESP32::Endstop endstopMin(pinEndstopMin);
+Stepper::ESP32::Endstop endstopMax(pinEndstopMax);
+
 Stepper::ESP32::MCPWM::Driver driver(pinEnable, pinStep, pinDirection, 16);
 Stepper::Generic::Generator generator(driver);
 Stepper::Generic::Motor motor(generator, 200, 1.0f);
-Stepper::ESP32::RotaryAxis axis(motor);
+Stepper::Generic::RotaryAxis axis(motor, 360.0f, false);
+Stepper::ESP32::Homing homing;
 
 Stepper::Generic::Motor::MotorTask task;
 
@@ -86,10 +94,38 @@ void setup() {
   rotaryEncoder.begin();
   driver.enable();
 
+  // Configure endstop debounce (5 ms) and attach to rotary axis
+  endstopMin.setDebounceUs(5000);
+  endstopMax.setDebounceUs(5000);
+  axis.setEndstops(&endstopMin, &endstopMax);
+
+  // Initialize homing with very slow speeds for safe first testing
+  Stepper::Generic::Homing::Config homingCfg;
+  homingCfg.endstop = Stepper::Generic::Axis::EndstopPosition::Min;
+  homingCfg.fastVelocity = 10.0f;      // 10 deg/s
+  homingCfg.slowVelocity = 2.0f;       // 2 deg/s
+  homingCfg.acceleration = 20.0f;      // 20 deg/s^2
+  homingCfg.deceleration = 20.0f;      // 20 deg/s^2
+  homingCfg.retractDistance = 5.0f;    // 5 deg back-off between fast & slow approach
+  homingCfg.backoffDistance = 90.0f;    // 90 deg final pull-off so motor doesn't rest on switch
+  homingCfg.homePosition = 0.0f;
+  homingCfg.timeoutMs = 30000;         // 30 s timeout
+  homing.setConfig(homingCfg);
+
+  // Uncomment to start async homing on startup:
+  homing.homeAsync(axis, [](bool success) {
+    Serial.printf("Homing finished: %s\n", success ? "SUCCESS" : "FAILED");
+  });
 }
 
 void loop() {
-  //Serial.printf("CurrentVelocity: %f\n", generator.getVelocity());
-  //Serial.printf("Steps: %lu\n", static_cast<uint32_t>(driver.getSteps()));
-  vTaskDelay(pdMS_TO_TICKS(5000));
+  Serial.printf("Endstop Min (GPIO 22): %s (lvl=%d) | Endstop Max (GPIO 23): %s (lvl=%d) | Homing: %d | Homed: %d | Angle: %.2f deg\n",
+                endstopMin.isTriggered() ? "TRIGGERED" : "open",
+                endstopMin.getLevel(),
+                endstopMax.isTriggered() ? "TRIGGERED" : "open",
+                endstopMax.getLevel(),
+                static_cast<int>(homing.getState()),
+                axis.isHomed(),
+                axis.getAngleDeg());
+  vTaskDelay(pdMS_TO_TICKS(500));
 }

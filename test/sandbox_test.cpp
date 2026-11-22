@@ -15,6 +15,7 @@
 #include "Generic/Motor.hpp"
 #include "Generic/Axis.hpp"
 #include "Generic/Axis_Rotary.hpp"
+#include "Generic/Homing.hpp"
 
 using UQ20x12 = UFixed<20,12>;
 
@@ -316,8 +317,8 @@ void testStepperEndstop() {
     printTestResult("Unregistered callback receives no events", voidRisingCount == countAfterUnregister);
 
     // Test 7: PullMode
-    endstop.setPullMode(Stepper::Generic::Endstop::PullMode::PullDown);
-    printTestResult("PullMode set/get", endstop.getPullMode() == Stepper::Generic::Endstop::PullMode::PullDown);
+    endstop.setPullMode(Stepper::Generic::Pin::PullMode::PullDown);
+    printTestResult("PullMode set/get", endstop.getPullMode() == Stepper::Generic::Pin::PullMode::PullDown);
 
     // Test 8: Debounce
     endstop.setDebounceUs(1000);
@@ -351,10 +352,12 @@ void testRotaryAxisHoming() {
     printTestResult("No min endstop initially", !axis.hasEndstopMin());
     printTestResult("No max endstop initially", !axis.hasEndstopMax());
 
+    Stepper::Generic::Homing homing;
+
     // Try homing with no endstop
-    bool homeNoEndstop = axis.homeMin();
+    bool homeNoEndstop = homing.homeMin(axis);
     printTestResult("Homing fails when endstop is not attached", !homeNoEndstop);
-    printTestResult("HomingState is Failed", axis.getHomingState() == Stepper::Generic::Axis::HomingState::Failed);
+    printTestResult("Homing state is Failed", homing.getState() == Stepper::Generic::Homing::State::Failed);
 
     axis.setEndstopMin(&endstopMin);
     axis.setEndstopMax(&endstopMax);
@@ -369,7 +372,7 @@ void testRotaryAxisHoming() {
     printTestResult("setPosition / getAngleDeg", axis.getAngleDeg() == 90.0f);
 
     // 4. Two-Stage Homing Simulation (Min Endstop)
-    Stepper::Generic::Axis::HomingConfig cfg;
+    Stepper::Generic::Homing::Config cfg;
     cfg.endstop = Stepper::Generic::Axis::EndstopPosition::Min;
     cfg.direction = Stepper::Direction::Counterclockwise;
     cfg.fastVelocity = 100.0f;
@@ -377,68 +380,86 @@ void testRotaryAxisHoming() {
     cfg.acceleration = 200.0f;
     cfg.deceleration = 200.0f;
     cfg.retractDistance = 15.0f;
+    cfg.backoffDistance = 5.0f;
     cfg.homePosition = -180.0f;
     cfg.timeoutMs = 1000;
 
+    bool sawBackingOff = false;
     int yieldCount = 0;
-    axis.setYieldFunction([&axis, &endstopMin, &yieldCount](uint32_t) {
+    homing.setYieldFunction([&axis, &generator, &homing, &endstopMin, &yieldCount, &sawBackingOff](uint32_t) {
         yieldCount++;
-        auto state = axis.getHomingState();
-        if (state == Stepper::Generic::Axis::HomingState::FastApproach) {
+        auto state = homing.getState();
+        if (state == Stepper::Generic::Homing::State::FastApproach) {
             if (yieldCount >= 3) {
                 endstopMin.simulateTrigger(true);
             }
-        } else if (state == Stepper::Generic::Axis::HomingState::Retracting) {
+        } else if (state == Stepper::Generic::Homing::State::Retracting) {
             endstopMin.simulateTrigger(false);
-        } else if (state == Stepper::Generic::Axis::HomingState::SlowApproach) {
+            axis.stop(); // simulate retract move finishing
+        } else if (state == Stepper::Generic::Homing::State::SlowApproach) {
             if (yieldCount >= 8) {
                 endstopMin.simulateTrigger(true);
             }
+        } else if (state == Stepper::Generic::Homing::State::BackingOff) {
+            sawBackingOff = true;
+            // Simulate stepping the full backoffDistance (5 deg of 360 deg @ 200 steps/rev -> ~2 steps)
+            uint32_t totalSteps = static_cast<uint32_t>(generator.getState().stepsTotal);
+            if (totalSteps > 0) {
+                generator.advanceStateAfterStep(totalSteps);
+            }
+            endstopMin.simulateTrigger(false);
+            axis.stop();
         }
     });
 
-    bool homeSuccess = axis.home(cfg);
+    bool homeSuccess = homing.home(axis, cfg);
     printTestResult("Two-stage homing Min completes successfully", homeSuccess);
+    printTestResult("Final back-off phase executed", sawBackingOff);
+    printTestResult("Endstop is released after final back-off", !endstopMin.isTriggered());
     printTestResult("Axis is marked homed", axis.isHomed());
     printTestResult("Axis is not homing after completion", !axis.isHoming());
-    printTestResult("HomingState is Done", axis.getHomingState() == Stepper::Generic::Axis::HomingState::Done);
-    printTestResult("Axis position matches homePosition (-180 deg)", axis.getPosition() == -180.0f);
-    printTestResult("Axis angle matches homePosition", axis.getAngleDeg() == -180.0f);
+    printTestResult("Homing state is Done", homing.getState() == Stepper::Generic::Homing::State::Done);
+    printTestResult("Axis position reflects backed-off angle (> -180 deg)", axis.getPosition() > -180.0f);
+    printTestResult("Axis angle matches position", axis.getAngleDeg() == axis.getPosition());
 
     // 5. Initial Retract (when endstop is already triggered before starting)
     endstopMin.simulateTrigger(true);
     yieldCount = 0;
-    axis.setYieldFunction([&axis, &endstopMin, &yieldCount](uint32_t) {
+    homing.setYieldFunction([&axis, &homing, &endstopMin, &yieldCount](uint32_t) {
         yieldCount++;
-        auto state = axis.getHomingState();
-        if (state == Stepper::Generic::Axis::HomingState::Retracting) {
+        auto state = homing.getState();
+        if (state == Stepper::Generic::Homing::State::Retracting) {
             if (yieldCount >= 2) {
                 endstopMin.simulateTrigger(false);
+                axis.stop(); // simulate retract move finishing
             }
-        } else if (state == Stepper::Generic::Axis::HomingState::FastApproach) {
+        } else if (state == Stepper::Generic::Homing::State::FastApproach) {
             if (yieldCount >= 5) {
                 endstopMin.simulateTrigger(true);
             }
-        } else if (state == Stepper::Generic::Axis::HomingState::SlowApproach) {
+        } else if (state == Stepper::Generic::Homing::State::SlowApproach) {
             if (yieldCount >= 9) {
                 endstopMin.simulateTrigger(true);
             }
+        } else if (state == Stepper::Generic::Homing::State::BackingOff) {
+            endstopMin.simulateTrigger(false);
+            axis.stop();
         }
     });
 
-    bool homeFromTriggered = axis.home(cfg);
+    bool homeFromTriggered = homing.home(axis, cfg);
     printTestResult("Homing with initially triggered endstop succeeds", homeFromTriggered);
     printTestResult("Axis homed after initial retract", axis.isHomed());
 
     // 6. Timeout handling
     endstopMin.simulateTrigger(false);
-    axis.setYieldFunction([](uint32_t) {
+    homing.setYieldFunction([](uint32_t) {
         // Never trigger endstop
     });
     cfg.timeoutMs = 50; // short 50ms timeout
-    bool homeTimeout = axis.home(cfg);
+    bool homeTimeout = homing.home(axis, cfg);
     printTestResult("Homing times out if endstop is never triggered", !homeTimeout);
-    printTestResult("Axis homingState is Failed after timeout", axis.getHomingState() == Stepper::Generic::Axis::HomingState::Failed);
+    printTestResult("Homing state is Failed after timeout", homing.getState() == Stepper::Generic::Homing::State::Failed);
 
     // 7. Max Endstop Homing
     cfg.endstop = Stepper::Generic::Axis::EndstopPosition::Max;
@@ -446,29 +467,33 @@ void testRotaryAxisHoming() {
     cfg.homePosition = 180.0f;
     cfg.timeoutMs = 1000;
     yieldCount = 0;
-    axis.setYieldFunction([&axis, &endstopMax, &yieldCount](uint32_t) {
+    homing.setYieldFunction([&axis, &homing, &endstopMax, &yieldCount](uint32_t) {
         yieldCount++;
-        auto state = axis.getHomingState();
-        if (state == Stepper::Generic::Axis::HomingState::FastApproach) {
+        auto state = homing.getState();
+        if (state == Stepper::Generic::Homing::State::FastApproach) {
             if (yieldCount >= 3) {
                 endstopMax.simulateTrigger(true);
             }
-        } else if (state == Stepper::Generic::Axis::HomingState::Retracting) {
+        } else if (state == Stepper::Generic::Homing::State::Retracting) {
             endstopMax.simulateTrigger(false);
-        } else if (state == Stepper::Generic::Axis::HomingState::SlowApproach) {
+            axis.stop(); // simulate retract move finishing
+        } else if (state == Stepper::Generic::Homing::State::SlowApproach) {
             if (yieldCount >= 7) {
                 endstopMax.simulateTrigger(true);
             }
+        } else if (state == Stepper::Generic::Homing::State::BackingOff) {
+            endstopMax.simulateTrigger(false);
+            axis.stop();
         }
     });
 
-    bool homeMaxSuccess = axis.home(cfg);
+    bool homeMaxSuccess = homing.home(axis, cfg);
     printTestResult("Two-stage homing Max completes successfully", homeMaxSuccess);
     printTestResult("Axis position matches homePosition (+180 deg)", axis.getPosition() == 180.0f);
 
-    // 8. Limit protection
-    axis.enableLimitProtection(true);
-    printTestResult("Limit protection enabled", axis.isLimitProtectionEnabled());
+    // 8. Limit protection (verify restored after homing!)
+    axis.enableLimitProtectionMin(true);
+    printTestResult("Limit protection min enabled", axis.isLimitProtectionMinEnabled());
     driver.start();
     printTestResult("Driver is running before limit hit", driver.isRunning());
     endstopMin.simulateTrigger(true);
