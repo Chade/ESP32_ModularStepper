@@ -152,7 +152,7 @@ bool Axis::home(const HomingConfig& config) {
         LOG_INFO("Endstop already triggered prior to homing, retracting first...");
         homingState_ = HomingState::Retracting;
         float retractVel = (config.slowVelocity > 0.0f) ? config.slowVelocity : config.fastVelocity;
-        runDistance(config.retractDistance, retractVel, config.acceleration, config.deceleration, retractDir);
+        run(config.retractDistance, retractVel, config.acceleration, config.deceleration, retractDir);
 
         uint32_t retractStart = getTimeMs();
         while (targetEndstop->isTriggered()) {
@@ -174,7 +174,7 @@ bool Axis::home(const HomingConfig& config) {
     LOG_INFO("Homing Phase 1: Fast approach...");
     homingState_ = HomingState::FastApproach;
     endstopTriggered = false;
-    runVelocity(config.fastVelocity, config.acceleration, config.deceleration, searchDir);
+    run(config.fastVelocity, config.acceleration, config.deceleration, searchDir);
 
     uint32_t phase1Start = getTimeMs();
     while (!endstopTriggered && !targetEndstop->isTriggered()) {
@@ -195,7 +195,7 @@ bool Axis::home(const HomingConfig& config) {
     LOG_INFO("Homing Phase 2: Retracting...");
     homingState_ = HomingState::Retracting;
     float retractVel = (config.slowVelocity > 0.0f) ? config.slowVelocity : config.fastVelocity;
-    runDistance(config.retractDistance, retractVel, config.acceleration, config.deceleration, retractDir);
+    run(config.retractDistance, retractVel, config.acceleration, config.deceleration, retractDir);
 
     uint32_t phase2Start = getTimeMs();
     while (targetEndstop->isTriggered()) {
@@ -217,7 +217,7 @@ bool Axis::home(const HomingConfig& config) {
     LOG_INFO("Homing Phase 3: Slow latch approach...");
     homingState_ = HomingState::SlowApproach;
     endstopTriggered = false;
-    runVelocity(config.slowVelocity, config.acceleration, config.deceleration, searchDir);
+    run(config.slowVelocity, config.acceleration, config.deceleration, searchDir);
 
     uint32_t phase3Start = getTimeMs();
     while (!endstopTriggered && !targetEndstop->isTriggered()) {

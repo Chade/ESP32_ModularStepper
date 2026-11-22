@@ -8,15 +8,6 @@ namespace Generic {
 RotaryAxis::RotaryAxis(Generic::Motor& motor, float angleDegPerRevolution, bool continuous)
     : Generic::Axis(motor), angleDegPerRevolution_(angleDegPerRevolution), continuous_(continuous) {
     assert(angleDegPerRevolution_ > 0);
-
-    // Setup rotary-specific default homing parameters (degrees & deg/s)
-    homingConfig_.fastVelocity = 60.0f;       // 60 deg/s
-    homingConfig_.slowVelocity = 10.0f;       // 10 deg/s
-    homingConfig_.acceleration = 120.0f;      // 120 deg/s^2
-    homingConfig_.deceleration = 120.0f;      // 120 deg/s^2
-    homingConfig_.retractDistance = 10.0f;    // 10 deg back-off
-    homingConfig_.homePosition = 0.0f;
-    homingConfig_.timeoutMs = 15000;
 }
 
 bool RotaryAxis::run(const RotaryAxisTask& task) {

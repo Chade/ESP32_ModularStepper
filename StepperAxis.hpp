@@ -106,8 +106,8 @@ public:
     virtual float getPosition() const = 0;
     virtual void setPosition(float position) = 0;
 
-    virtual void runVelocity(float velocity, float acceleration, float deceleration, Direction direction) = 0;
-    virtual bool runDistance(float distance, float velocity, float acceleration, float deceleration, Direction direction) = 0;
+    virtual void run(float velocity, float acceleration, float deceleration, Direction direction) = 0;
+    virtual void run(float distance, float velocity, float acceleration, float deceleration, Direction direction) = 0;
 
     // Custom time & yield hooks (for host sandbox testing vs RTOS)
     void setYieldFunction(YieldFn fn) { yieldFn_ = std::move(fn); };

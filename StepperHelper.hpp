@@ -23,11 +23,13 @@ namespace Stepper
 
     enum class Direction : int8_t
     {
+        Down = -1,
         Backward = -1,
         Clockwise = -1,
         Neutral = 0,
         Counterclockwise = 1,
-        Forward = 1
+        Forward = 1,
+        Up = 1
     };
 
     enum class State : uint8_t

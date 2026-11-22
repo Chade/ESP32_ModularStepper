@@ -11,7 +11,7 @@
 
 namespace Stepper {
 namespace ESP32 {
-    class Driver : public Stepper::Generic::Driver {
+    class Driver : public Generic::Driver {
     public:
         Driver() = delete;
         Driver(Generic::Pin& enablePin, Generic::Pin& stepPin, Generic::Pin& directionPin, uint8_t microsteps = 1);

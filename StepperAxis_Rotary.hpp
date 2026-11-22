@@ -26,21 +26,6 @@ public:
     void run(float targetVelocity, float acceleration, float deceleration, Direction direction);
     void run(float angle_deg, float targetVelocity, float acceleration, float deceleration, Direction direction);
 
-    // Implementation of Generic::Axis pure virtual motion methods
-    void runVelocity(float velocity, float acceleration, float deceleration, Direction direction) override {
-        run(velocity, acceleration, deceleration, direction);
-    };
-
-    bool runDistance(float distance, float velocity, float acceleration, float deceleration, Direction direction) override {
-        RotaryAxisTask task;
-        task.angle = distance;
-        task.velocity = velocity;
-        task.acceleration = acceleration;
-        task.deceleration = deceleration;
-        task.direction = direction;
-        return run(task);
-    };
-
     float getPosition() const override {
         return getAngleDeg();
     };
