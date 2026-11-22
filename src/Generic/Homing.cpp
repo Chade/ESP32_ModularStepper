@@ -32,29 +32,27 @@ void Homing::restoreLimitProtection(Axis& axis, Axis::EndstopPosition pos) {
     }
 }
 
-bool Homing::home(Axis& axis, const Config& config) {
-    Generic::Endstop* targetEndstop = axis.getEndstop(config.endstop);
+void Homing::finalizeAxisState(Axis& axis) {
+    auto& generator = axis.motor().generator();
+    generator.getDriver().reset(true);
+    generator.resetState(false); // preserve calibrated positionSteps
+
+    axis.setHomed(true);
+    axis.setHoming(false);
+    state_ = State::Done;
+}
+
+bool Homing::homeToEndstop(Axis& axis, Axis::EndstopPosition endstopPos, const Config& config) {
+    Generic::Endstop* targetEndstop = axis.getEndstop(endstopPos);
     if (!targetEndstop) {
         LOG_WARN("Cannot home: Endstop %s not configured",
-                 (config.endstop == Axis::EndstopPosition::Min) ? "Min" : "Max");
-        state_ = State::Failed;
+                 (endstopPos == Axis::EndstopPosition::Min) ? "Min" : "Max");
         return false;
     }
 
-    axis.setHoming(true);
-    axis.setHomed(false);
-
-    // Determine approach and retract directions (Min = -1 -> CW/Backward, Max = +1 -> CCW/Forward)
-    Direction searchDir = config.direction;
-    if (searchDir == Direction::Neutral) {
-        searchDir = (config.endstop == Axis::EndstopPosition::Min)
-                    ? Direction::Clockwise
-                    : Direction::Counterclockwise;
-    }
-
-    Direction retractDir = (searchDir == Direction::Clockwise)
-                           ? Direction::Counterclockwise
-                           : Direction::Clockwise;
+    Direction searchDir = searchDirectionFor(endstopPos);
+    Direction retractDir = reverseDirection(searchDir);
+    float retractVel = (config.slowVelocity > 0.0f) ? config.slowVelocity : config.fastVelocity;
 
     volatile bool endstopTriggered = false;
     targetEndstop->registerCallback(Generic::Endstop::Edge::Both, [&endstopTriggered, targetEndstop, &axis, this](Generic::Endstop::Edge) {
@@ -64,23 +62,19 @@ bool Homing::home(Axis& axis, const Config& config) {
         }
     });
 
-    auto cleanupOnFailure = [&]() {
+    auto failEndstop = [&]() {
         axis.stop();
         targetEndstop->unregisterCallback();
-        restoreLimitProtection(axis, config.endstop);
-        state_ = State::Failed;
-        axis.setHoming(false);
+        restoreLimitProtection(axis, endstopPos);
+        return false;
     };
 
-    float retractVel = (config.slowVelocity > 0.0f) ? config.slowVelocity : config.fastVelocity;
-
-    // Step 0: Initial retract if already triggered before homing
+    // Step 0: Initial retract if already triggered before approaching
     if (targetEndstop->isTriggered()) {
         LOG_INFO("Endstop already triggered prior to homing, retracting (%.2f)...", config.retractDistance);
         if (config.retractDistance <= 0.0f) {
             LOG_ERROR("Cannot retract: retractDistance must be > 0");
-            cleanupOnFailure();
-            return false;
+            return failEndstop();
         }
         state_ = State::Retracting;
         axis.run(config.retractDistance, retractVel, config.acceleration, config.deceleration, retractDir);
@@ -93,8 +87,7 @@ bool Homing::home(Axis& axis, const Config& config) {
 
         if (targetEndstop->isTriggered()) {
             LOG_ERROR("Endstop still triggered after initial retract distance (%.2f)", config.retractDistance);
-            cleanupOnFailure();
-            return false;
+            return failEndstop();
         }
     }
 
@@ -112,8 +105,7 @@ bool Homing::home(Axis& axis, const Config& config) {
         if (axis.getState() == Stepper::State::Stopped) {
             if (!endstopTriggered && !targetEndstop->isTriggered()) {
                 LOG_ERROR("Homing fast approach exceeded max travel distance (%.2f)", config.maxTravelDistance);
-                cleanupOnFailure();
-                return false;
+                return failEndstop();
             }
             break;
         }
@@ -136,8 +128,7 @@ bool Homing::home(Axis& axis, const Config& config) {
 
         if (targetEndstop->isTriggered()) {
             LOG_ERROR("Endstop still triggered after retract distance (%.2f)", config.retractDistance);
-            cleanupOnFailure();
-            return false;
+            return failEndstop();
         }
     }
 
@@ -156,8 +147,7 @@ bool Homing::home(Axis& axis, const Config& config) {
         if (axis.getState() == Stepper::State::Stopped) {
             if (!endstopTriggered && !targetEndstop->isTriggered()) {
                 LOG_ERROR("Homing slow latch exceeded max distance (%.2f)", slowMaxDistance);
-                cleanupOnFailure();
-                return false;
+                return failEndstop();
             }
             break;
         }
@@ -166,51 +156,163 @@ bool Homing::home(Axis& axis, const Config& config) {
     axis.stop();
     yieldMs(20);
 
+    targetEndstop->unregisterCallback();
+    restoreLimitProtection(axis, endstopPos);
+    return true;
+}
+
+bool Homing::backoffFromEndstop(Axis& axis, Axis::EndstopPosition endstopPos, const Config& config) {
+    if (config.backoffDistance <= 0.0f) {
+        return true;
+    }
+
+    Generic::Endstop* targetEndstop = axis.getEndstop(endstopPos);
+    Direction retractDir = reverseDirection(searchDirectionFor(endstopPos));
+    float retractVel = (config.slowVelocity > 0.0f) ? config.slowVelocity : config.fastVelocity;
+
+    LOG_INFO("Homing Phase 4: Backing off switch (%.2f)...", config.backoffDistance);
+    state_ = State::BackingOff;
+    axis.run(config.backoffDistance, retractVel, config.acceleration, config.deceleration, retractDir);
+
+    while (axis.getState() != Stepper::State::Stopped) {
+        yieldMs(1);
+    }
+    axis.stop();
+    yieldMs(20);
+
+    if (targetEndstop && targetEndstop->isTriggered()) {
+        LOG_ERROR("Endstop still triggered after final back-off distance (%.2f)", config.backoffDistance);
+        return false;
+    }
+    return true;
+}
+
+bool Homing::home(Axis& axis, const Config& config) {
+    if (isDualEndstopStrategy(config.strategy)) {
+        if (!axis.hasEndstopMin() || !axis.hasEndstopMax()) {
+            LOG_ERROR("Cannot perform dual-endstop homing: Both Min and Max endstops must be attached");
+            state_ = State::Failed;
+            return false;
+        }
+
+        const bool minFirst = (config.strategy == Strategy::MinThenMax);
+        const Axis::EndstopPosition firstEndstop  = minFirst ? Axis::EndstopPosition::Min : Axis::EndstopPosition::Max;
+        const Axis::EndstopPosition secondEndstop = minFirst ? Axis::EndstopPosition::Max : Axis::EndstopPosition::Min;
+
+        axis.setHoming(true);
+        axis.setHomed(false);
+
+        // 1. Home to first endstop and establish reference position
+        LOG_INFO("Dual-endstop homing (1/2): Homing to %s endstop...", minFirst ? "Min" : "Max");
+        if (!homeToEndstop(axis, firstEndstop, config)) {
+            state_ = State::Failed;
+            axis.setHoming(false);
+            return false;
+        }
+        axis.setPosition(config.homePosition);
+
+        // 2. Home to second endstop and calibrate axis travel limits
+        LOG_INFO("Dual-endstop homing (2/2): Homing to %s endstop...", minFirst ? "Max" : "Min");
+        if (!homeToEndstop(axis, secondEndstop, config)) {
+            state_ = State::Failed;
+            axis.setHoming(false);
+            return false;
+        }
+        float measuredSecond = axis.getPosition();
+        float minPos = minFirst ? config.homePosition : measuredSecond;
+        float maxPos = minFirst ? measuredSecond : config.homePosition;
+        if (maxPos <= minPos) {
+            LOG_ERROR("Invalid calibrated limits [%.2f, %.2f]", minPos, maxPos);
+            state_ = State::Failed;
+            axis.setHoming(false);
+            return false;
+        }
+        axis.setLimits(minPos, maxPos);
+        LOG_INFO("Axis limits calibrated to [%.2f, %.2f]", minPos, maxPos);
+
+        // 3. Optional final back-off off the second switch
+        if (!backoffFromEndstop(axis, secondEndstop, config)) {
+            state_ = State::Failed;
+            axis.setHoming(false);
+            return false;
+        }
+
+        finalizeAxisState(axis);
+        LOG_INFO("Dual-endstop homing successful. Position: %.2f, Limits: [%.2f, %.2f]",
+                 axis.getPosition(), axis.getMinLimit(), axis.getMaxLimit());
+        return true;
+    }
+
+    // Single-endstop strategy (Strategy::Min or Strategy::Max)
+    const Axis::EndstopPosition targetEndstop = (config.strategy == Strategy::Min)
+                                                ? Axis::EndstopPosition::Min
+                                                : Axis::EndstopPosition::Max;
+    if (!axis.hasEndstop(targetEndstop)) {
+        LOG_WARN("Cannot home: Endstop %s not configured",
+                 (targetEndstop == Axis::EndstopPosition::Min) ? "Min" : "Max");
+        state_ = State::Failed;
+        return false;
+    }
+
+    axis.setHoming(true);
+    axis.setHomed(false);
+
+    if (!homeToEndstop(axis, targetEndstop, config)) {
+        state_ = State::Failed;
+        axis.setHoming(false);
+        return false;
+    }
+
     // Assign home reference position at the exact slow-latch switch trigger point
     axis.setPosition(config.homePosition);
 
-    // Phase 4: Optional final back-off so the axis does not rest on the switch
-    if (config.backoffDistance > 0.0f) {
-        LOG_INFO("Homing Phase 4: Backing off switch (%.2f)...", config.backoffDistance);
-        state_ = State::BackingOff;
-        axis.run(config.backoffDistance, retractVel, config.acceleration, config.deceleration, retractDir);
-
-        while (axis.getState() != Stepper::State::Stopped) {
-            yieldMs(1);
-        }
-        axis.stop();
-        yieldMs(20);
-
-        if (targetEndstop->isTriggered()) {
-            LOG_ERROR("Endstop still triggered after final back-off distance (%.2f)", config.backoffDistance);
-            cleanupOnFailure();
-            return false;
-        }
+    if (!backoffFromEndstop(axis, targetEndstop, config)) {
+        state_ = State::Failed;
+        axis.setHoming(false);
+        return false;
     }
 
-    targetEndstop->unregisterCallback();
-    restoreLimitProtection(axis, config.endstop);
-
-    // Phase 5: Done
-    axis.setHomed(true);
-    axis.setHoming(false);
-    state_ = State::Done;
+    finalizeAxisState(axis);
     LOG_INFO("Homing successful. Position: %.2f (home ref: %.2f)", axis.getPosition(), config.homePosition);
     return true;
 }
 
-bool Homing::home(Axis& axis, Axis::EndstopPosition pos) {
+bool Homing::home(Axis& axis) {
+    return home(axis, config_);
+}
+
+bool Homing::home(Axis& axis, Strategy strategy) {
     Config cfg = config_;
-    cfg.endstop = pos;
+    cfg.strategy = strategy;
     return home(axis, cfg);
 }
 
 bool Homing::homeMin(Axis& axis) {
-    return home(axis, Axis::EndstopPosition::Min);
+    return home(axis, Strategy::Min);
 }
 
 bool Homing::homeMax(Axis& axis) {
-    return home(axis, Axis::EndstopPosition::Max);
+    return home(axis, Strategy::Max);
+}
+
+bool Homing::homeMinMax(Axis& axis) {
+    return homeMinMax(axis, config_);
+}
+
+bool Homing::homeMinMax(Axis& axis, const Config& config) {
+    Config cfg = config;
+    cfg.strategy = Strategy::MinThenMax;
+    return home(axis, cfg);
+}
+
+bool Homing::homeMaxMin(Axis& axis) {
+    return homeMaxMin(axis, config_);
+}
+
+bool Homing::homeMaxMin(Axis& axis, const Config& config) {
+    Config cfg = config;
+    cfg.strategy = Strategy::MaxThenMin;
+    return home(axis, cfg);
 }
 
 } // namespace Generic

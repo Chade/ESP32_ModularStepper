@@ -34,18 +34,12 @@ public:
         setAngleDeg(position);
     };
 
-    void setLimits(float minAngleDeg, float maxAngleDeg) {
-        assert(minAngleDeg < maxAngleDeg);
-        minAngleDeg_ = minAngleDeg;
-        maxAngleDeg_ = maxAngleDeg;
-    };
-
     float getMinAngleDeg() const {
-        return minAngleDeg_;
+        return getMinLimit();
     };
 
     float getMaxAngleDeg() const {
-        return maxAngleDeg_;
+        return getMaxLimit();
     };
 
     float getVelocity() const {
@@ -79,8 +73,6 @@ private:
 
     float angleDegPerRevolution_;
     bool continuous_;
-    float minAngleDeg_ {0.0f};
-    float maxAngleDeg_ {360.0f};
 };
 
 } // namespace Generic

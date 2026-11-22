@@ -76,8 +76,8 @@ namespace Generic {
             return state_;
         };
 
-        void resetState() {
-            state_.currentState = State::Undefined; // movement state
+        void resetState(bool resetPosition = true) {
+            state_.currentState = State::Stopped; // movement state
             state_.previousState = State::Undefined; // movement state
 
             state_.currentDirection = Direction::Neutral; // current direction
@@ -92,7 +92,9 @@ namespace Generic {
             state_.deceleration    = 0.0; // steps/s^2
 
             // Position state
-            state_.positionSteps = 0;
+            if (resetPosition) {
+                state_.positionSteps = 0;
+            }
 
             // Distance mode state
             state_.stepsTotal = 0; // total steps requested

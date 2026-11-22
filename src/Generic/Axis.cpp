@@ -51,11 +51,33 @@ void Axis::emergencyStop() {
     isHoming_ = false;
 }
 
+bool Axis::isDirectionAllowed(Direction direction) const {
+    if (isHoming_) {
+        return true;
+    }
+
+    if (limitProtectionMinEnabled_ && isEndstopTriggered(EndstopPosition::Min) &&
+        compare_enums(EndstopPosition::Min, direction)) {
+        LOG_WARN("Move blocked: Min limit switch is triggered");
+        return false;
+    }
+
+    if (limitProtectionMaxEnabled_ && isEndstopTriggered(EndstopPosition::Max) &&
+        compare_enums(EndstopPosition::Max, direction)) {
+        LOG_WARN("Move blocked: Max limit switch is triggered");
+        return false;
+    }
+
+    return true;
+}
+
 void Axis::enableLimitProtectionMin(bool enable) {
     limitProtectionMinEnabled_ = enable;
     if (enable && endstopMin_) {
         endstopMin_->registerCallback(Generic::Endstop::Edge::Both, [this](Generic::Endstop::Edge) {
-            if (limitProtectionMinEnabled_ && !isHoming_ && endstopMin_->isTriggered()) {
+            Direction curDir = motor_.generator().getState().currentDirection;
+            if (limitProtectionMinEnabled_ && !isHoming_ && endstopMin_->isTriggered() &&
+                !compare_enums(EndstopPosition::Max, curDir)) {
                 LOG_WARN("Min limit switch triggered! Halting motion.");
                 stop();
             }
@@ -67,7 +89,9 @@ void Axis::enableLimitProtectionMax(bool enable) {
     limitProtectionMaxEnabled_ = enable;
     if (enable && endstopMax_) {
         endstopMax_->registerCallback(Generic::Endstop::Edge::Both, [this](Generic::Endstop::Edge) {
-            if (limitProtectionMaxEnabled_ && !isHoming_ && endstopMax_->isTriggered()) {
+            Direction curDir = motor_.generator().getState().currentDirection;
+            if (limitProtectionMaxEnabled_ && !isHoming_ && endstopMax_->isTriggered() &&
+                !compare_enums(EndstopPosition::Min, curDir)) {
                 LOG_WARN("Max limit switch triggered! Halting motion.");
                 stop();
             }

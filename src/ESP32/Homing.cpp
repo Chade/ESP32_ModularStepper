@@ -34,9 +34,19 @@ bool Homing::homeAsync(Generic::Axis& axis, const Config& config, HomingCallback
         return false;
     }
 
-    if (!axis.hasEndstop(config.endstop)) {
-        LOG_WARN("Cannot start async homing: Target endstop not attached");
-        return false;
+    if (isDualEndstopStrategy(config.strategy)) {
+        if (!axis.hasEndstopMin() || !axis.hasEndstopMax()) {
+            LOG_WARN("Cannot start async dual-endstop homing: Both Min and Max endstops must be attached");
+            return false;
+        }
+    } else {
+        Generic::Axis::EndstopPosition target = (config.strategy == Strategy::Min)
+                                                ? Generic::Axis::EndstopPosition::Min
+                                                : Generic::Axis::EndstopPosition::Max;
+        if (!axis.hasEndstop(target)) {
+            LOG_WARN("Cannot start async homing: Target endstop not attached");
+            return false;
+        }
     }
 
     activeAxis_ = &axis;
@@ -71,14 +81,34 @@ bool Homing::homeAsync(Generic::Axis& axis, const Config& config, HomingCallback
     return true;
 }
 
-bool Homing::homeAsync(Generic::Axis& axis, Generic::Axis::EndstopPosition pos, HomingCallback callback) {
+bool Homing::homeAsync(Generic::Axis& axis, Strategy strategy, HomingCallback callback) {
     Config cfg = config_;
-    cfg.endstop = pos;
+    cfg.strategy = strategy;
     return homeAsync(axis, cfg, std::move(callback));
 }
 
 bool Homing::homeAsync(Generic::Axis& axis, HomingCallback callback) {
-    return homeAsync(axis, config_.endstop, std::move(callback));
+    return homeAsync(axis, config_, std::move(callback));
+}
+
+bool Homing::homeMinMaxAsync(Generic::Axis& axis, HomingCallback callback) {
+    return homeMinMaxAsync(axis, config_, std::move(callback));
+}
+
+bool Homing::homeMinMaxAsync(Generic::Axis& axis, const Config& config, HomingCallback callback) {
+    Config cfg = config;
+    cfg.strategy = Strategy::MinThenMax;
+    return homeAsync(axis, cfg, std::move(callback));
+}
+
+bool Homing::homeMaxMinAsync(Generic::Axis& axis, HomingCallback callback) {
+    return homeMaxMinAsync(axis, config_, std::move(callback));
+}
+
+bool Homing::homeMaxMinAsync(Generic::Axis& axis, const Config& config, HomingCallback callback) {
+    Config cfg = config;
+    cfg.strategy = Strategy::MaxThenMin;
+    return homeAsync(axis, cfg, std::move(callback));
 }
 
 bool Homing::waitForHoming(uint32_t timeoutMs) {
@@ -111,11 +141,22 @@ void Homing::abortHoming() {
 
         if (activeAxis_ != nullptr) {
             activeAxis_->stop();
-            Generic::Endstop* targetEndstop = activeAxis_->getEndstop(pendingConfig_.endstop);
-            if (targetEndstop != nullptr) {
-                targetEndstop->unregisterCallback();
+            auto cleanupEndstop = [&](Generic::Axis::EndstopPosition pos) {
+                Generic::Endstop* e = activeAxis_->getEndstop(pos);
+                if (e != nullptr) {
+                    e->unregisterCallback();
+                }
+                restoreLimitProtection(*activeAxis_, pos);
+            };
+            if (isDualEndstopStrategy(pendingConfig_.strategy)) {
+                cleanupEndstop(Generic::Axis::EndstopPosition::Min);
+                cleanupEndstop(Generic::Axis::EndstopPosition::Max);
+            } else {
+                Generic::Axis::EndstopPosition target = (pendingConfig_.strategy == Strategy::Min)
+                                                        ? Generic::Axis::EndstopPosition::Min
+                                                        : Generic::Axis::EndstopPosition::Max;
+                cleanupEndstop(target);
             }
-            restoreLimitProtection(*activeAxis_, pendingConfig_.endstop);
             activeAxis_->setHoming(false);
             activeAxis_ = nullptr;
         }

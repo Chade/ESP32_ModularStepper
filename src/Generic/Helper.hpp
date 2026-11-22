@@ -10,15 +10,21 @@ using UQ20x12 = UFixed<20, 12>;
 namespace Stepper
 {
     template <typename T>
-    auto cast_enum_to_base(T e)
+    constexpr auto cast_enum_to_base(T e)
     {
         return static_cast<std::underlying_type_t<T>>(e);
     };
 
     template <typename T>
-    std::underlying_type_t<T> compare_enums(T e1, T e2)
+    constexpr std::underlying_type_t<T> compare_enums(T e1, T e2)
     {
         return cast_enum_to_base(e1) & cast_enum_to_base(e2);
+    };
+
+    template <typename T1, typename T2>
+    constexpr bool compare_enums(T1 e1, T2 e2)
+    {
+        return static_cast<int64_t>(cast_enum_to_base(e1)) == static_cast<int64_t>(cast_enum_to_base(e2));
     };
 
     enum class Direction : int8_t
@@ -31,6 +37,10 @@ namespace Stepper
         Forward = 1,
         Up = 1
     };
+
+    inline constexpr Direction reverseDirection(Direction dir) {
+        return static_cast<Direction>(-cast_enum_to_base(dir));
+    }
 
     enum class State : uint8_t
     {
@@ -46,7 +56,7 @@ namespace Stepper
     };
 
     // Fast integer square root for 64-bit values (floor(sqrt(val)))
-    inline uint64_t isqrt64(uint64_t val) {
+    inline constexpr uint64_t isqrt64(uint64_t val) {
         if (val == 0) return 0;
 
         // Skip leading zero-pair iterations using Count Leading Zeros
@@ -68,7 +78,7 @@ namespace Stepper
     }
 
     // Computes the square root of a UQ20x12 fixed-point value cleanly
-    inline UQ20x12 sqrt(UQ20x12 val) {
+    inline constexpr UQ20x12 sqrt(UQ20x12 val) {
         constexpr uint64_t scale = UQ20x12::Scale; // 2^12 = 4096
         uint64_t val_raw = static_cast<uint64_t>(val.getInternal());
 

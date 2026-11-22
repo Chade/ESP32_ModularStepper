@@ -20,9 +20,9 @@ Stepper::ESP32::Pin pinEnable(25);
 Stepper::ESP32::Pin pinStep(26);
 Stepper::ESP32::Pin pinDirection(27);
 
-// Endstop pins on GPIO 22 (Min) & GPIO 23 (Max), active-low (inverse=true) with internal pull-up
-Stepper::ESP32::Pin pinEndstopMin(22, true, Stepper::Generic::Pin::IoMode::Input, Stepper::Generic::Pin::PullMode::PullUp);
-Stepper::ESP32::Pin pinEndstopMax(23, true, Stepper::Generic::Pin::IoMode::Input, Stepper::Generic::Pin::PullMode::PullUp);
+// Endstop pins on GPIO 12 (Min) & GPIO 14 (Max), active-low (inverse=true) with internal pull-up
+Stepper::ESP32::Pin pinEndstopMin(12, true, Stepper::Generic::Pin::IoMode::Input, Stepper::Generic::Pin::PullMode::PullUp);
+Stepper::ESP32::Pin pinEndstopMax(14, true, Stepper::Generic::Pin::IoMode::Input, Stepper::Generic::Pin::PullMode::PullUp);
 Stepper::ESP32::Endstop endstopMin(pinEndstopMin);
 Stepper::ESP32::Endstop endstopMax(pinEndstopMax);
 
@@ -99,33 +99,36 @@ void setup() {
   endstopMax.setDebounceUs(5000);
   axis.setEndstops(&endstopMin, &endstopMax);
 
-  // Initialize homing with very slow speeds for safe first testing
+  // Initialize dual-endstop homing (Min -> Max) with very slow speeds for safe testing
   Stepper::Generic::Homing::Config homingCfg;
-  homingCfg.endstop = Stepper::Generic::Axis::EndstopPosition::Min;
+  homingCfg.strategy = Stepper::Generic::Homing::Strategy::MinThenMax;
   homingCfg.fastVelocity = 10.0f;      // 10 deg/s
   homingCfg.slowVelocity = 2.0f;       // 2 deg/s
   homingCfg.acceleration = 20.0f;      // 20 deg/s^2
   homingCfg.deceleration = 20.0f;      // 20 deg/s^2
   homingCfg.retractDistance = 5.0f;    // 5 deg back-off between fast & slow approach
-  homingCfg.backoffDistance = 90.0f;    // 90 deg final pull-off so motor doesn't rest on switch
-  homingCfg.maxTravelDistance = 95.0f; // abort if switch not found within 1 full revolution
+  homingCfg.backoffDistance = 5.0f;    // 5 deg final pull-off so motor doesn't rest on Max switch
+  homingCfg.maxTravelDistance = 270.0f; // abort if switch not found within 270 deg
   homingCfg.homePosition = 0.0f;
   homing.setConfig(homingCfg);
 
-  // Uncomment to start async homing on startup:
-  homing.homeAsync(axis, [](bool success) {
-    Serial.printf("Homing finished: %s\n", success ? "SUCCESS" : "FAILED");
+  homing.homeMinMaxAsync(axis, [](bool success) {
+    Serial.printf("Dual-endstop homing finished: %s | Limits: [%.2f, %.2f] deg | Angle: %.2f deg\n",
+                  success ? "SUCCESS" : "FAILED",
+                  axis.getMinAngleDeg(),
+                  axis.getMaxAngleDeg(),
+                  axis.getAngleDeg());
   });
 }
 
 void loop() {
-  Serial.printf("Endstop Min (GPIO 22): %s (lvl=%d) | Endstop Max (GPIO 23): %s (lvl=%d) | Homing: %d | Homed: %d | Angle: %.2f deg\n",
-                endstopMin.isTriggered() ? "TRIGGERED" : "open",
-                endstopMin.getLevel(),
-                endstopMax.isTriggered() ? "TRIGGERED" : "open",
-                endstopMax.getLevel(),
+  Serial.printf("Min(22): %s | Max(23): %s | Homing: %d | Homed: %d | Angle: %.2f deg | Limits: [%.2f, %.2f]\n",
+                endstopMin.isTriggered() ? "TRIG" : "open",
+                endstopMax.isTriggered() ? "TRIG" : "open",
                 static_cast<int>(homing.getState()),
                 axis.isHomed(),
-                axis.getAngleDeg());
+                axis.getAngleDeg(),
+                axis.getMinAngleDeg(),
+                axis.getMaxAngleDeg());
   vTaskDelay(pdMS_TO_TICKS(500));
 }

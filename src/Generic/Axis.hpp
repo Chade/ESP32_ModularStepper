@@ -1,6 +1,7 @@
 #ifndef STEPPER_AXIS_HPP
 #define STEPPER_AXIS_HPP
 
+#include <cassert>
 #include <cstdint>
 
 #include "Motor.hpp"
@@ -48,11 +49,23 @@ public:
     void enableLimitProtectionMax(bool enable = true);
     bool isLimitProtectionMinEnabled() const { return limitProtectionMinEnabled_; };
     bool isLimitProtectionMaxEnabled() const { return limitProtectionMaxEnabled_; };
+    bool isDirectionAllowed(Direction direction) const;
 
     bool isEndstopTriggered(EndstopPosition pos) const {
         Generic::Endstop* e = getEndstop(pos);
         return e ? e->isTriggered() : false;
     };
+
+    // Soft travel limits (in axis units)
+    virtual void setLimits(float minPos, float maxPos) {
+        assert(minPos < maxPos);
+        minLimit_ = minPos;
+        maxLimit_ = maxPos;
+    };
+    virtual void setMinLimit(float minPos) { minLimit_ = minPos; };
+    virtual void setMaxLimit(float maxPos) { maxLimit_ = maxPos; };
+    float getMinLimit() const { return minLimit_; };
+    float getMaxLimit() const { return maxLimit_; };
 
     // Homing status flags (managed by Homing module or user)
     bool isHomed() const { return isHomed_; };
@@ -79,6 +92,9 @@ protected:
     Generic::Motor& motor_;
     Generic::Endstop* endstopMin_ {nullptr};
     Generic::Endstop* endstopMax_ {nullptr};
+
+    float minLimit_ {0.0f};
+    float maxLimit_ {0.0f};
 
     bool isHomed_ {false};
     bool isHoming_ {false};

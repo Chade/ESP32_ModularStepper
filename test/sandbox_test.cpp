@@ -373,8 +373,7 @@ void testRotaryAxisHoming() {
 
     // 4. Two-Stage Homing Simulation (Min Endstop)
     Stepper::Generic::Homing::Config cfg;
-    cfg.endstop = Stepper::Generic::Axis::EndstopPosition::Min;
-    cfg.direction = Stepper::Direction::Neutral; // Auto: Min -> CW (-1), retract -> CCW (+1)
+    cfg.strategy = Stepper::Generic::Homing::Strategy::Min;
     cfg.fastVelocity = 100.0f;
     cfg.slowVelocity = 20.0f;
     cfg.acceleration = 200.0f;
@@ -422,6 +421,10 @@ void testRotaryAxisHoming() {
     printTestResult("Homing state is Done", homing.getState() == Stepper::Generic::Homing::State::Done);
     printTestResult("Axis position reflects backed-off angle (> -180 deg)", axis.getPosition() > -180.0f);
     printTestResult("Axis angle matches position", axis.getAngleDeg() == axis.getPosition());
+    printTestResult("Generator stepsDone reset after homing", generator.getStepsDone() == 0);
+    printTestResult("Generator stepsTotal reset after homing", generator.getState().stepsTotal == 0);
+    printTestResult("Driver steps reset after homing", driver.getSteps() == 0);
+    printTestResult("Axis state is Stopped after homing", axis.getState() == Stepper::State::Stopped);
 
     // 5. Initial Retract (when endstop is already triggered before starting)
     endstopMin.simulateTrigger(true);
@@ -467,8 +470,7 @@ void testRotaryAxisHoming() {
     printTestResult("Homing state is Failed after maxTravelDistance abort", homing.getState() == Stepper::Generic::Homing::State::Failed);
 
     // 7. Max Endstop Homing
-    cfg.endstop = Stepper::Generic::Axis::EndstopPosition::Max;
-    cfg.direction = Stepper::Direction::Clockwise;
+    cfg.strategy = Stepper::Generic::Homing::Strategy::Max;
     cfg.homePosition = 180.0f;
     cfg.maxTravelDistance = 360.0f;
     yieldCount = 0;
@@ -496,13 +498,44 @@ void testRotaryAxisHoming() {
     printTestResult("Two-stage homing Max completes successfully", homeMaxSuccess);
     printTestResult("Axis position matches homePosition (+180 deg)", axis.getPosition() == 180.0f);
 
-    // 8. Limit protection (verify restored after homing!)
+    // 8. Limit protection (immediate stop + directional blocking)
     axis.enableLimitProtectionMin(true);
+    axis.enableLimitProtectionMax(true);
     printTestResult("Limit protection min enabled", axis.isLimitProtectionMinEnabled());
-    driver.start();
-    printTestResult("Driver is running before limit hit", driver.isRunning());
+    printTestResult("Limit protection max enabled", axis.isLimitProtectionMaxEnabled());
+
+    // Moving toward Min -> hitting Min stops driver
+    axis.run(10.0f, 50.0f, 100.0f, 100.0f, Stepper::Direction::Clockwise);
+    printTestResult("Driver is running before Min limit hit", driver.isRunning());
     endstopMin.simulateTrigger(true);
-    printTestResult("Driver stopped when limit hit", !driver.isRunning());
+    printTestResult("Driver stopped when Min limit hit", !driver.isRunning());
+
+    // While Min is triggered: moving further into Min (CW/Backward) is blocked, backing off (CCW/Forward) is allowed
+    printTestResult("Move into triggered Min (CW) is blocked", !axis.isDirectionAllowed(Stepper::Direction::Clockwise));
+    printTestResult("Move away from triggered Min (CCW) is allowed", axis.isDirectionAllowed(Stepper::Direction::Counterclockwise));
+
+    Stepper::Generic::RotaryAxis::RotaryAxisTask blockedTask;
+    blockedTask.angle = 10.0f;
+    blockedTask.velocity = 50.0f;
+    blockedTask.acceleration = 100.0f;
+    blockedTask.deceleration = 100.0f;
+    blockedTask.direction = Stepper::Direction::Clockwise;
+    printTestResult("RotaryAxis::run() rejects move into triggered Min", !axis.run(blockedTask));
+
+    Stepper::Generic::RotaryAxis::RotaryAxisTask backoffTask = blockedTask;
+    backoffTask.direction = Stepper::Direction::Counterclockwise;
+    printTestResult("RotaryAxis::run() allows back-off from triggered Min", axis.run(backoffTask));
+    // Bounce on Min while backing off in CCW must NOT stop the driver
+    endstopMin.simulateTrigger(true);
+    printTestResult("Min bounce while backing off (CCW) does not stop driver", driver.isRunning());
+    endstopMin.simulateTrigger(false);
+    axis.stop();
+
+    // While Max is triggered: moving into Max (CCW/Forward) is blocked, backing off (CW/Backward) is allowed
+    endstopMax.simulateTrigger(true);
+    printTestResult("Move into triggered Max (CCW) is blocked", !axis.isDirectionAllowed(Stepper::Direction::Counterclockwise));
+    printTestResult("Move away from triggered Max (CW) is allowed", axis.isDirectionAllowed(Stepper::Direction::Clockwise));
+    endstopMax.simulateTrigger(false);
 }
 
 void testStepCountExactness() {
@@ -549,6 +582,95 @@ void testStepCountExactness() {
     printTestResult("90 deg trapezoid move final angle == 90.0 deg", std::abs(axis.getAngleDeg() - 90.0f) < 0.001f);
 }
 
+void testDualEndstopHoming() {
+    std::cout << "\n=== Testing Dual-Endstop (MinThenMax) Homing ===" << std::endl;
+
+    Stepper::Mock::Pin pinEnable(1);
+    Stepper::Mock::Pin pinStep(2);
+    Stepper::Mock::Pin pinDir(3);
+    Stepper::Mock::Driver driver(pinEnable, pinStep, pinDir, 1);
+    Stepper::Generic::Generator generator(driver);
+    Stepper::Generic::Motor motor(generator, 200, 1.0f);
+    Stepper::Generic::RotaryAxis axis(motor, 360.0f, false);
+
+    Stepper::Mock::Pin pinMin(10);
+    Stepper::Mock::Pin pinMax(11);
+    Stepper::Mock::Endstop endstopMin(pinMin);
+    Stepper::Mock::Endstop endstopMax(pinMax);
+
+    Stepper::Generic::Homing homing;
+    Stepper::Generic::Homing::Config cfg;
+    cfg.strategy = Stepper::Generic::Homing::Strategy::MinThenMax;
+    cfg.fastVelocity = 100.0f;
+    cfg.slowVelocity = 20.0f;
+    cfg.acceleration = 200.0f;
+    cfg.deceleration = 200.0f;
+    cfg.retractDistance = 10.0f;
+    cfg.backoffDistance = 5.0f; // 2 steps = 3.6 deg at 200 steps/rev
+    cfg.maxTravelDistance = 360.0f;
+    cfg.homePosition = 0.0f;
+
+    // 1. Fails when no endstops attached
+    printTestResult("MinThenMax fails with 0 endstops", !homing.homeMinMax(axis, cfg));
+    printTestResult("State is Failed with 0 endstops", homing.getState() == Stepper::Generic::Homing::State::Failed);
+
+    // 2. Fails when only Min endstop attached
+    axis.setEndstopMin(&endstopMin);
+    printTestResult("MinThenMax fails with only Min endstop", !homing.homeMinMax(axis, cfg));
+    printTestResult("State is Failed with only 1 endstop", homing.getState() == Stepper::Generic::Homing::State::Failed);
+
+    // 3. Succeeds with both Min and Max endstops attached
+    axis.setEndstopMax(&endstopMax);
+
+    // Track whether we are homing Min (phaseGroup=0) or Max (phaseGroup=1)
+    int slowLatchCount = 0;
+    int yieldCount = 0;
+    homing.setYieldFunction([&](uint32_t) {
+        yieldCount++;
+        auto state = homing.getState();
+        bool homingMax = (slowLatchCount >= 1);
+        auto& activeEndstop = homingMax ? endstopMax : endstopMin;
+
+        if (state == Stepper::Generic::Homing::State::FastApproach) {
+            if (homingMax && axis.getState() != Stepper::State::Stopped) {
+                // Simulate traveling 100 steps (+180.0 deg) from Min to Max
+                generator.advanceStateAfterStep(100);
+                activeEndstop.simulateTrigger(true);
+            } else if (!homingMax && yieldCount >= 2) {
+                activeEndstop.simulateTrigger(true);
+            }
+        } else if (state == Stepper::Generic::Homing::State::Retracting) {
+            if (axis.getState() != Stepper::State::Stopped) {
+                activeEndstop.simulateTrigger(false);
+                axis.stop();
+            }
+        } else if (state == Stepper::Generic::Homing::State::SlowApproach) {
+            if (axis.getState() != Stepper::State::Stopped) {
+                activeEndstop.simulateTrigger(true);
+                slowLatchCount++;
+            }
+        } else if (state == Stepper::Generic::Homing::State::BackingOff) {
+            if (axis.getState() != Stepper::State::Stopped) {
+                uint32_t totalSteps = static_cast<uint32_t>(generator.getState().stepsTotal);
+                if (totalSteps > 0) {
+                    generator.advanceStateAfterStep(totalSteps);
+                }
+                activeEndstop.simulateTrigger(false);
+                axis.stop();
+            }
+        }
+    });
+
+    bool ok = homing.homeMinMax(axis, cfg);
+    printTestResult("MinThenMax homing completes successfully", ok);
+    printTestResult("Axis is homed after MinThenMax", axis.isHomed());
+    printTestResult("Homing state is Done", homing.getState() == Stepper::Generic::Homing::State::Done);
+    printTestResult("Min limit calibrated to 0.0 deg", std::abs(axis.getMinAngleDeg() - 0.0f) < 0.001f);
+    printTestResult("Max limit calibrated to 180.0 deg", std::abs(axis.getMaxAngleDeg() - 180.0f) < 0.001f);
+    printTestResult("Final angle backed off below 180.0 deg", axis.getAngleDeg() < 180.0f && axis.getAngleDeg() > 170.0f);
+    printTestResult("Max endstop released after back-off", !endstopMax.isTriggered());
+}
+
 int main() {
     std::cout << "==========================================" << std::endl;
     std::cout << "   ESP32 Modular Stepper Pure C++ Sandbox  " << std::endl;
@@ -557,6 +679,7 @@ int main() {
     testStepperEndstop();
     testRotaryAxisHoming();
     testStepCountExactness();
+    testDualEndstopHoming();
     //testEnumHelpers();
     //testStepperGenerator();
     testStepperGeneratorZeroAcc();

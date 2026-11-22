@@ -21,8 +21,12 @@ public:
 
     // Asynchronous non-blocking homing routines executed in a background FreeRTOS task
     bool homeAsync(Generic::Axis& axis, const Config& config, HomingCallback callback = nullptr);
-    bool homeAsync(Generic::Axis& axis, Generic::Axis::EndstopPosition pos = Generic::Axis::EndstopPosition::Min, HomingCallback callback = nullptr);
-    bool homeAsync(Generic::Axis& axis, HomingCallback callback);
+    bool homeAsync(Generic::Axis& axis, Strategy strategy, HomingCallback callback = nullptr);
+    bool homeAsync(Generic::Axis& axis, HomingCallback callback = nullptr);
+    bool homeMinMaxAsync(Generic::Axis& axis, HomingCallback callback = nullptr);
+    bool homeMinMaxAsync(Generic::Axis& axis, const Config& config, HomingCallback callback = nullptr);
+    bool homeMaxMinAsync(Generic::Axis& axis, HomingCallback callback = nullptr);
+    bool homeMaxMinAsync(Generic::Axis& axis, const Config& config, HomingCallback callback = nullptr);
 
     // Block calling FreeRTOS task until homing completes or timeout expires
     bool waitForHoming(uint32_t timeoutMs = portMAX_DELAY);
