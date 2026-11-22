@@ -2,7 +2,7 @@
 #define STEPPER_MOTOR_HPP
 
 #include <cassert>
-#include "StepperGenerator.hpp"
+#include "Generator.hpp"
 
 namespace Stepper {
 namespace Generic {

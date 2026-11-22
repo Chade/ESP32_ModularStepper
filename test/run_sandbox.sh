@@ -19,12 +19,13 @@ g++ -std=c++17 -Wall -Wextra -Wno-unused-parameter -Wno-format \
     -I"$STUBS_INC" \
     -I"$FIXED_POINTS_INC" \
     -I"$PROJECT_DIR" \
+    -I"$PROJECT_DIR/src" \
     -I"$SCRIPT_DIR" \
-    "$PROJECT_DIR/StepperDriver.cpp" \
-    "$PROJECT_DIR/StepperGenerator.cpp" \
-    "$PROJECT_DIR/StepperMotor.cpp" \
-    "$PROJECT_DIR/StepperAxis.cpp" \
-    "$PROJECT_DIR/StepperAxis_Rotary.cpp" \
+    "$PROJECT_DIR/src/Generic/Driver.cpp" \
+    "$PROJECT_DIR/src/Generic/Generator.cpp" \
+    "$PROJECT_DIR/src/Generic/Motor.cpp" \
+    "$PROJECT_DIR/src/Generic/Axis.cpp" \
+    "$PROJECT_DIR/src/Generic/Axis_Rotary.cpp" \
     sandbox_test.cpp -o "$TARGET"
 
 echo "[EXEC] Running $TARGET..."

@@ -5,9 +5,9 @@
 #include <freertos/task.h>
 #include <functional>
 
-#include "StepperHelper.hpp"
-#include "StepperDriver.hpp"
-#include "StepperPin_ESP32.hpp"
+#include "../Generic/Helper.hpp"
+#include "../Generic/Driver.hpp"
+#include "Pin.hpp"
 
 namespace Stepper {
 namespace ESP32 {

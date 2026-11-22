@@ -1,7 +1,7 @@
 #ifndef STEPPER_ENDSTOP_MOCK_HPP
 #define STEPPER_ENDSTOP_MOCK_HPP
 
-#include "StepperEndstop.hpp"
+#include "Generic/Endstop.hpp"
 #include "StepperPin_Mock.hpp"
 
 namespace Stepper {

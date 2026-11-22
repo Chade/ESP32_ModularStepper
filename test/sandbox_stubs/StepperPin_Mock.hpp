@@ -1,7 +1,7 @@
 #ifndef STEPPER_PIN_MOCK_HPP
 #define STEPPER_PIN_MOCK_HPP
 
-#include "StepperPin.hpp"
+#include "Generic/Pin.hpp"
 
 namespace Stepper {
 namespace Mock {

@@ -1,6 +1,6 @@
-#include "StepperGenerator.hpp"
-#include "StepperHelper.hpp"
-#include "StepperLog.hpp"
+#include "Generator.hpp"
+#include "Helper.hpp"
+#include "Log.hpp"
 
 
 namespace Stepper {

@@ -5,10 +5,10 @@
 #include <functional>
 #include <chrono>
 
-#include "StepperMotor.hpp"
-#include "StepperEndstop.hpp"
-#include "StepperHelper.hpp"
-#include "StepperLog.hpp"
+#include "Motor.hpp"
+#include "Endstop.hpp"
+#include "Helper.hpp"
+#include "Log.hpp"
 
 namespace Stepper {
 namespace Generic {

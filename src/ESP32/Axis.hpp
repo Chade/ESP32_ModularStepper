@@ -6,8 +6,8 @@
 #include <freertos/semphr.h>
 #include <functional>
 
-#include "StepperAxis_Rotary.hpp"
-#include "StepperEndstop_ESP32.hpp"
+#include "../Generic/Axis_Rotary.hpp"
+#include "Endstop.hpp"
 
 namespace Stepper {
 namespace ESP32 {

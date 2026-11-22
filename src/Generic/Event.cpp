@@ -1,5 +1,5 @@
-#include "StepperEvent.hpp"
-#include "StepperHelper.hpp"
+#include "Event.hpp"
+#include "Helper.hpp"
 
 namespace Stepper
 {

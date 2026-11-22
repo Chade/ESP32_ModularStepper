@@ -8,13 +8,13 @@
 #include <FixedPoints.h>
 #include <FixedPointsCommon.h>
 // Include project headers using host stubs
-#include "StepperGenerator.hpp"
+#include "Generic/Generator.hpp"
 #include "StepperDriver_Mock.hpp"
 #include "StepperEndstop_Mock.hpp"
-#include "StepperHelper.hpp"
-#include "StepperMotor.hpp"
-#include "StepperAxis.hpp"
-#include "StepperAxis_Rotary.hpp"
+#include "Generic/Helper.hpp"
+#include "Generic/Motor.hpp"
+#include "Generic/Axis.hpp"
+#include "Generic/Axis_Rotary.hpp"
 
 using UQ20x12 = UFixed<20,12>;
 

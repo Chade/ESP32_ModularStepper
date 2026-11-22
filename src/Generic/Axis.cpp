@@ -1,4 +1,4 @@
-#include "StepperAxis.hpp"
+#include "Axis.hpp"
 #include <thread>
 
 #if defined(ARDUINO) || defined(ESP32)

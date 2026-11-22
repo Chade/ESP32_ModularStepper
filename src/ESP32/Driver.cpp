@@ -1,5 +1,5 @@
-#include "StepperDriver_ESP32.hpp"
-#include "StepperLog.hpp"
+#include "Driver.hpp"
+#include "../Generic/Log.hpp"
 
 namespace Stepper {
 namespace ESP32 {

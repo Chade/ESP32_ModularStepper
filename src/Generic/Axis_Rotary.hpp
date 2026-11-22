@@ -2,8 +2,8 @@
 #define STEPPER_AXIS_ROTARY_HPP
 
 #include <cassert>
-#include "StepperAxis.hpp"
-#include "StepperMotor.hpp"
+#include "Axis.hpp"
+#include "Motor.hpp"
 
 namespace Stepper {
 namespace Generic {

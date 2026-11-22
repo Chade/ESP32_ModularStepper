@@ -4,8 +4,8 @@
 #include <cstdint>
 #include <cassert>
 #include <functional>
-#include "StepperPin.hpp"
-#include "StepperHelper.hpp"
+#include "Pin.hpp"
+#include "Helper.hpp"
 
 
 namespace Stepper {

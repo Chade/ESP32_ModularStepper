@@ -6,8 +6,8 @@
 #include <freertos/queue.h>
 #include <driver/gpio.h>
 
-#include "StepperEndstop.hpp"
-#include "StepperPin_ESP32.hpp"
+#include "../Generic/Endstop.hpp"
+#include "Pin.hpp"
 
 namespace Stepper {
 namespace ESP32 {

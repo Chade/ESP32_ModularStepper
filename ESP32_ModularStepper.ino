@@ -1,13 +1,13 @@
 #include <ESP32RotaryEncoder.h>
 //#include "FastRotaryEncoder.hpp"
 
-#include "StepperLog.hpp"
-#include "StepperPin_ESP32.hpp"
-#include "StepperDriver_ESP32_MCPWM.hpp"
-#include "StepperGenerator.hpp"
-#include "StepperMotor.hpp"
-#include "StepperEndstop_ESP32.hpp"
-#include "StepperAxis_ESP32.hpp"
+#include "src/Generic/Log.hpp"
+#include "src/ESP32/Pin.hpp"
+#include "src/ESP32/Driver_MCPWM.hpp"
+#include "src/Generic/Generator.hpp"
+#include "src/Generic/Motor.hpp"
+#include "src/ESP32/Endstop.hpp"
+#include "src/ESP32/Axis.hpp"
 
 
 //FastRotaryEncoder encoder(33, 32, 35, 100, 100000, 100);

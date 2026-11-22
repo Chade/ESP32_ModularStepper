@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <FixedPoints.h>
 
-#include "StepperDriver.hpp"
+#include "Driver.hpp"
 
 
 using UQ20x12 = UFixed<20, 12>;

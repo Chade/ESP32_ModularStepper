@@ -3,7 +3,7 @@
 
 #include <functional>
 
-#include "StepperDriver.hpp"
+#include "Generic/Driver.hpp"
 #include "StepperPin_Mock.hpp"
 
 namespace Stepper {

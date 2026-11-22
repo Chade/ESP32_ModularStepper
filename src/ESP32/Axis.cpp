@@ -1,5 +1,5 @@
-#include "StepperAxis_ESP32.hpp"
-#include "StepperLog.hpp"
+#include "Axis.hpp"
+#include "../Generic/Log.hpp"
 
 namespace Stepper {
 namespace ESP32 {

@@ -1,5 +1,5 @@
-#include "StepperDriver.hpp"
-#include "StepperLog.hpp"
+#include "Driver.hpp"
+#include "Log.hpp"
 
 namespace Stepper {
 namespace Generic {

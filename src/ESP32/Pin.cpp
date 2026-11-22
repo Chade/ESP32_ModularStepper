@@ -1,4 +1,4 @@
-#include "StepperPin_ESP32.hpp"
+#include "Pin.hpp"
 
 namespace Stepper {
 namespace ESP32 {
