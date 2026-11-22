@@ -8,7 +8,7 @@
 namespace Stepper {
 namespace Generic {
 
-class RotaryAxis : public Generic::Axis {
+class RotaryAxis : public virtual Generic::Axis {
 public:
     RotaryAxis() = delete;
     RotaryAxis(Generic::Motor& motor, float angleDegPerRevolution = 360.0f, bool continuous = true);
@@ -23,8 +23,8 @@ public:
     };
 
     bool run(const RotaryAxisTask& task);
-    void run(float targetVelocity, float acceleration, float deceleration, Direction direction);
-    void run(float angle_deg, float targetVelocity, float acceleration, float deceleration, Direction direction);
+    void run(float targetVelocity, float acceleration, float deceleration, Direction direction) override;
+    void run(float angle_deg, float targetVelocity, float acceleration, float deceleration, Direction direction) override;
 
     float getPosition() const override {
         return getAngleDeg();

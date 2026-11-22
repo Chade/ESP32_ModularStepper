@@ -4,15 +4,15 @@
 namespace Stepper {
 namespace ESP32 {
 
-RotaryAxis::RotaryAxis(Generic::Motor& motor, float angleDegPerRevolution, bool continuous)
-    : Generic::RotaryAxis(motor, angleDegPerRevolution, continuous) {
+Axis::Axis(Generic::Motor& motor)
+    : Generic::Axis(motor) {
     homingDoneSem_ = xSemaphoreCreateBinary();
     if (homingDoneSem_ != nullptr) {
         xSemaphoreGive(homingDoneSem_);
     }
 }
 
-RotaryAxis::~RotaryAxis() {
+Axis::~Axis() {
     abortHoming();
     if (homingDoneSem_ != nullptr) {
         vSemaphoreDelete(homingDoneSem_);
@@ -20,7 +20,7 @@ RotaryAxis::~RotaryAxis() {
     }
 }
 
-bool RotaryAxis::homeAsync(const HomingConfig& config, HomingCallback callback) {
+bool Axis::homeAsync(const HomingConfig& config, HomingCallback callback) {
     if (isHoming_) {
         LOG_WARN("Homing is already in progress");
         return false;
@@ -40,8 +40,8 @@ bool RotaryAxis::homeAsync(const HomingConfig& config, HomingCallback callback) 
     }
 
     BaseType_t res = xTaskCreatePinnedToCore(
-        RotaryAxis::homingTask,
-        "RotaryHoming",
+        Axis::homingTask,
+        "AxisHoming",
         4096,
         this,
         configMAX_PRIORITIES - 3,
@@ -60,17 +60,17 @@ bool RotaryAxis::homeAsync(const HomingConfig& config, HomingCallback callback) 
     return true;
 }
 
-bool RotaryAxis::homeAsync(EndstopPosition pos, HomingCallback callback) {
+bool Axis::homeAsync(EndstopPosition pos, HomingCallback callback) {
     HomingConfig cfg = homingConfig_;
     cfg.endstop = pos;
     return homeAsync(cfg, std::move(callback));
 }
 
-bool RotaryAxis::homeAsync(HomingCallback callback) {
+bool Axis::homeAsync(HomingCallback callback) {
     return homeAsync(homingConfig_.endstop, std::move(callback));
 }
 
-bool RotaryAxis::waitForHoming(uint32_t timeoutMs) {
+bool Axis::waitForHoming(uint32_t timeoutMs) {
     if (!isHoming_ && homingTaskHandle_ == nullptr) {
         return isHomed_;
     }
@@ -89,7 +89,7 @@ bool RotaryAxis::waitForHoming(uint32_t timeoutMs) {
     return false;
 }
 
-void RotaryAxis::abortHoming() {
+void Axis::abortHoming() {
     if (isHoming_ || homingTaskHandle_ != nullptr) {
         LOG_INFO("Aborting active homing sequence");
         stop();
@@ -113,8 +113,8 @@ void RotaryAxis::abortHoming() {
     }
 }
 
-void RotaryAxis::homingTask(void* args) {
-    RotaryAxis* self = static_cast<RotaryAxis*>(args);
+void Axis::homingTask(void* args) {
+    Axis* self = static_cast<Axis*>(args);
 
     LOG_INFO("FreeRTOS homing task started");
     bool success = self->home(self->pendingConfig_);
@@ -135,4 +135,3 @@ void RotaryAxis::homingTask(void* args) {
 
 } // namespace ESP32
 } // namespace Stepper
-

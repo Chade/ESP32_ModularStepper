@@ -6,19 +6,19 @@
 #include <freertos/semphr.h>
 #include <functional>
 
-#include "../Generic/Axis_Rotary.hpp"
+#include "../Generic/Axis.hpp"
 #include "Endstop.hpp"
 
 namespace Stepper {
 namespace ESP32 {
 
-class RotaryAxis : public Generic::RotaryAxis {
+class Axis : public virtual Generic::Axis {
 public:
     using HomingCallback = std::function<void(bool success)>;
 
-    RotaryAxis() = delete;
-    RotaryAxis(Generic::Motor& motor, float angleDegPerRevolution = 360.0f, bool continuous = true);
-    ~RotaryAxis() override;
+    Axis() = delete;
+    explicit Axis(Generic::Motor& motor);
+    ~Axis() override;
 
     // Asynchronous non-blocking homing routines executed in a background FreeRTOS task
     bool homeAsync(const HomingConfig& config, HomingCallback callback = nullptr);
@@ -44,4 +44,3 @@ protected:
 } // namespace Stepper
 
 #endif // STEPPER_AXIS_ESP32_HPP
-

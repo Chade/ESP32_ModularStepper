@@ -7,7 +7,7 @@
 #include "src/Generic/Generator.hpp"
 #include "src/Generic/Motor.hpp"
 #include "src/ESP32/Endstop.hpp"
-#include "src/ESP32/Axis.hpp"
+#include "src/ESP32/Axis_Rotary.hpp"
 
 
 //FastRotaryEncoder encoder(33, 32, 35, 100, 100000, 100);
