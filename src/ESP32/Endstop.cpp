@@ -8,8 +8,7 @@ namespace ESP32 {
 
 Endstop::Endstop(Generic::Pin& pin)
         : Generic::Endstop(pin) {
-    // Hardware/FreeRTOS initialization is deferred to init() (called lazily on enableInterrupt())
-    // because global C++ constructors run before FreeRTOS and ESP-IDF IPC tasks are started.
+
 }
 
 Endstop::~Endstop() {
@@ -36,10 +35,8 @@ void Endstop::init() {
         return;
     }
 
-    gpio_num_t gpioNum = static_cast<gpio_num_t>(pin_.getPin());
-
     eventQueue_ = xQueueCreate(16, sizeof(Edge));
-
+    
     xTaskCreatePinnedToCore(
         Endstop::task,
         "EndstopTask",
@@ -49,13 +46,14 @@ void Endstop::init() {
         &taskHandle_,
         1
     );
-
+    
     // Ignore error if ISR service is already installed
     esp_err_t err = gpio_install_isr_service(0);
     if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
         ESP_ERROR_CHECK(err);
     }
-
+    
+    gpio_num_t gpioNum = static_cast<gpio_num_t>(pin_.getPin());
     ESP_ERROR_CHECK(gpio_set_intr_type(gpioNum, GPIO_INTR_ANYEDGE));
     ESP_ERROR_CHECK(gpio_isr_handler_add(gpioNum, Endstop::isrHandler, this));
     // Default to disabled until enableInterrupt() is called

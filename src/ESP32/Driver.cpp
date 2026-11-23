@@ -7,7 +7,7 @@ namespace ESP32 {
             : Generic::Driver(enablePin, stepPin, directionPin, microsteps) {
 
         // Create step task
-        xTaskCreatePinnedToCore(
+        BaseType_t res = xTaskCreatePinnedToCore(
             Driver::task, /* Task function */
             "StepTask",         /* Task name (max. 16 characters by default) */
             8192,               /* Stack size in bytes */
@@ -16,6 +16,11 @@ namespace ESP32 {
             &taskHandle_,       /* Task handle */
             0                   /* CPU core to use */
         );
+
+        if (res != pdPASS) {
+            LOG_ERROR("Failed to create FreeRTOS driver task");
+        }
+
         // esp_task_wdt_config_t config = {
         //     .timeout_ms = 60000,
         //     .idle_core_mask = 0, // Do not watch any idle task
