@@ -30,6 +30,7 @@ Stepper::ESP32::MCPWM::Driver driver(pinEnable, pinStep, pinDirection, 16);
 Stepper::Generic::Generator generator(driver);
 Stepper::Generic::Motor motor(generator, 200, 1.0f);
 Stepper::Generic::RotaryAxis axis(motor, 360.0f, false);
+//Stepper::Generic::Motor::MotorTask task;
 Stepper::Generic::RotaryAxis::RotaryAxisTask task;
 Stepper::ESP32::Homing homing;
 
@@ -47,17 +48,18 @@ void setup() {
   endstopMax.setDebounceUs(5000);
   axis.setEndstops(&endstopMin, &endstopMax);
 
-  task.angle = 90.0f;
+  //task.revolutions = 0.0f;
+  task.angle = 0.0f;
   task.velocity = 1.0;
   task.acceleration = 100.0f;
   task.deceleration = 100.0f;
-  task.moveRelative = true;
 
   rotaryEncoder.setEncoderType( EncoderType::HAS_PULLUP );
-	rotaryEncoder.setBoundaries(0, 360, false);
+	rotaryEncoder.setBoundaries(-360, 360, false);
   rotaryEncoder.setStepValue(1);
-  rotaryEncoder.setEncoderValue(task.angle);
-  // rotaryEncoder.setEncoderValue(task.velocity);
+  //rotaryEncoder.setEncoderValue(task.revolutions);
+  //rotaryEncoder.setEncoderValue(task.angle);
+  rotaryEncoder.setEncoderValue(task.velocity);
 
   // Initialize dual-endstop homing (Min -> Max) with very slow speeds for safe testing
   Stepper::Generic::Homing::Config homingCfg;
@@ -75,7 +77,9 @@ void setup() {
   rotaryEncoder.onTurned([](long value) {
     Serial.print("Angle: ");
     Serial.println(value);
-    task.angle = value;
+    //task.revolutions = value/10.0f;
+    //task.angle = value;
+    task.velocity = value/10.0f;
   });
 
   rotaryEncoder.onPressed([](unsigned long duration) {
@@ -88,7 +92,9 @@ void setup() {
                   axis.getMaxAngleDeg(),
                   axis.getAngleDeg());
       });
+      return;
     }
+    //motor.run(task);
     axis.run(task);
   });
 
@@ -97,13 +103,13 @@ void setup() {
 }
 
 void loop() {
-  Serial.printf("Min(22): %s | Max(23): %s | Homing: %d | Homed: %d | Angle: %.2f deg | Limits: [%.2f, %.2f]\n",
-                endstopMin.isTriggered() ? "TRIG" : "open",
-                endstopMax.isTriggered() ? "TRIG" : "open",
-                static_cast<int>(homing.getState()),
-                axis.isHomed(),
-                axis.getAngleDeg(),
-                axis.getMinAngleDeg(),
-                axis.getMaxAngleDeg());
+  // Serial.printf("Min(22): %s | Max(23): %s | Homing: %d | Homed: %d | Angle: %.2f deg | Limits: [%.2f, %.2f]\n",
+  //               endstopMin.isTriggered() ? "TRIG" : "open",
+  //               endstopMax.isTriggered() ? "TRIG" : "open",
+  //               static_cast<int>(homing.getState()),
+  //               axis.isHomed(),
+  //               axis.getAngleDeg(),
+  //               axis.getMinAngleDeg(),
+  //               axis.getMaxAngleDeg());
   vTaskDelay(pdMS_TO_TICKS(500));
 }

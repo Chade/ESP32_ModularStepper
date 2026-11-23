@@ -12,41 +12,57 @@ LinearAxis::LinearAxis(Generic::Motor& motor, float distanceMmPerRevolution)
 }
 
 bool LinearAxis::run(const LinearAxisTask& task) {
-    if (!isDirectionAllowed(getDirection(task.position, task.velocity))) {
-        return false;
-    }
-
     if (!task.moveRelative && !isHomed_) {
         LOG_WARN("Cannot move to absolute position because axis is not homed");
         return false;
     }
 
-    float position;
-    float targetPos;
+    float distance = 0.0f;
+    float velocity = task.velocity;
     float currentPos = getPosition();
+    float targetPos = currentPos;
+
     if (task.moveRelative) {
-        position = task.position;
-        targetPos = currentPos + position;
+        if (task.position == 0.0f) {
+            return true;
+        }
+        distance = task.position * static_cast<float>(sign(task.velocity));
+        velocity = fabs(task.velocity);
+        targetPos = currentPos + distance;
     }
     else {
+        if (task.position == currentPos) {
+            return true;
+        }
         targetPos = task.position;
-        position = targetPos - currentPos;
+        distance = targetPos - currentPos;
+        velocity = fabs(task.velocity);
     }
 
-    if (position != 0.0f && !isHoming_  && isHomed_) {
+    if (!isDirectionAllowed(getDirection(distance, velocity))) {
+        return false;
+    }
+
+    if (distance != 0.0f && !isHoming_ && isHomed_) {
         if (targetPos < minLimit_) {
             LOG_WARN("Target position %.2f mm is below minimum limit %.2f mm", targetPos, minLimit_);
-            position = std::max(0.0f, currentPos - minLimit_);
+            distance = std::min(0.0f, minLimit_ - currentPos);
+            if (distance == 0.0f) {
+                return false;
+            }
         }
         else if (targetPos > maxLimit_) {
             LOG_WARN("Target position %.2f mm is above maximum limit %.2f mm", targetPos, maxLimit_);
-            position = std::max(0.0f, maxLimit_ - currentPos);
+            distance = std::max(0.0f, maxLimit_ - currentPos);
+            if (distance == 0.0f) {
+                return false;
+            }
         }
     }
 
     Generic::Motor::MotorTask motorTask;
-    motorTask.revolutions = mmToRevolutions(position);
-    motorTask.velocity = mmToRevolutions(task.velocity);
+    motorTask.revolutions = mmToRevolutions(distance);
+    motorTask.velocity = mmToRevolutions(velocity);
     motorTask.acceleration = mmToRevolutions(task.acceleration);
     motorTask.deceleration = mmToRevolutions(task.deceleration);
     return motor_.run(motorTask);

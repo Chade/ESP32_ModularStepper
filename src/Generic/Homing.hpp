@@ -11,11 +11,11 @@ namespace Generic {
 
 class Homing {
 public:
-    enum class Strategy : uint8_t {
-        Min = 0,        // Home to Min endstop (sets position = homePosition)
-        Max = 1,        // Home to Max endstop (sets position = homePosition)
-        MinThenMax = 2, // Home to Min (minLimit = homePosition), then Max (maxLimit = measured)
-        MaxThenMin = 3  // Home to Max (maxLimit = homePosition), then Min (minLimit = measured)
+    enum class Strategy : int8_t {
+        MinThenMax = -2, // Home to Min (minLimit = homePosition), then Max (maxLimit = measured)
+        Min = -1,        // Home to Min endstop (sets position = homePosition)
+        Max = 1,         // Home to Max endstop (sets position = homePosition)
+        MaxThenMin = 2   // Home to Max (maxLimit = homePosition), then Min (minLimit = measured)
     };
 
     enum class State : uint8_t {
@@ -91,13 +91,14 @@ protected:
 
     // Reusable post-latch pull-off sequence (Phase 4)
     bool backoffFromEndstop(Axis& axis, Axis::EndstopPosition endstopPos, const Config& config);
+    bool backoffFromEndstop(Axis& axis, Axis::EndstopPosition endstopPos, float distance, float velocity, float acceleration, float dceleration);
 
     static bool isDualEndstopStrategy(Strategy strategy) {
         return strategy == Strategy::MinThenMax || strategy == Strategy::MaxThenMin;
     };
 
     static Direction searchDirectionFor(Axis::EndstopPosition pos) {
-        return static_cast<Direction>(-cast_enum_to_base(pos));
+        return static_cast<Direction>(cast_enum_to_base(pos));
     };
 
     void yieldMs(uint32_t delayMs) const;

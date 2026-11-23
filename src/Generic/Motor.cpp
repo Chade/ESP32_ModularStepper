@@ -16,10 +16,10 @@ namespace Generic {
 
     bool Motor::run(const MotorTask& task) {
         Generic::Generator::GeneratorTask genTask;
-        genTask.steps = static_cast<uint32_t>(revolutionsToSteps(task.revolutions));
-        genTask.velocity = revolutionsToSteps(task.velocity);
-        genTask.acceleration = revolutionsToSteps(task.acceleration);
-        genTask.deceleration = revolutionsToSteps(task.deceleration);
+        genTask.steps = static_cast<uint32_t>(revolutionsToSteps(fabs(task.revolutions)));
+        genTask.velocity = revolutionsToSteps(fabs(task.velocity));
+        genTask.acceleration = revolutionsToSteps(fabs(task.acceleration));
+        genTask.deceleration = revolutionsToSteps(fabs(task.deceleration));
         genTask.direction = getDirection(task.revolutions, task.velocity);
         return generator_.run(genTask);
     }

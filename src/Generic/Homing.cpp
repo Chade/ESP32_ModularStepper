@@ -189,6 +189,42 @@ bool Homing::backoffFromEndstop(Axis& axis, Axis::EndstopPosition endstopPos, co
     return true;
 }
 
+bool Homing::backoffFromEndstop(Axis& axis, Axis::EndstopPosition endstopPos, float distance, float velocity, float acceleration, float dceleration) {
+    if (distance == 0.0f) {
+        LOG_ERROR("Backoff distance must not be zero");
+        return false;
+    }
+
+    Generic::Endstop* targetEndstop = axis.getEndstop(endstopPos);
+
+    if (targetEndstop == nullptr) {
+        LOG_ERROR("No endstop at position %d", cast_enum_to_base(endstopPos));
+        return false;
+    }
+
+    if (!targetEndstop->isTriggered()) {
+        return true;
+    }
+
+    Direction backoffDirection = reverseDirection(searchDirectionFor(endstopPos));
+    float signedVelocity = fabs(velocity) * sign(cast_enum_to_base(backoffDirection));
+    axis.run(distance, signedVelocity, acceleration, dceleration);
+
+    while (axis.getState() != Stepper::State::Stopped) {
+        yieldMs(1);
+    }
+    axis.stop();
+    yieldMs(20);
+
+    if (targetEndstop->isTriggered()) {
+        LOG_ERROR("Endstop still triggered after backing off (%.2f)", distance);
+        return false;
+    }
+
+    return true;
+}
+
+
 bool Homing::home(Axis& axis, const Config& config) {
     if (isDualEndstopStrategy(config.strategy)) {
         if (!axis.hasEndstopMin() || !axis.hasEndstopMax()) {
@@ -246,7 +282,9 @@ bool Homing::home(Axis& axis, const Config& config) {
     }
 
     // Single-endstop strategy (Strategy::Min or Strategy::Max)
-    const Axis::EndstopPosition targetEndstop = static_cast<Axis::EndstopPosition>(cast_enum_to_base(config.strategy));
+    const Axis::EndstopPosition targetEndstop = (config.strategy == Strategy::Min)
+                                                ? Axis::EndstopPosition::Min
+                                                : Axis::EndstopPosition::Max;
     if (!axis.hasEndstop(targetEndstop)) {
         LOG_WARN("Cannot home: Endstop %s not configured",
                  (targetEndstop == Axis::EndstopPosition::Min) ? "Min" : "Max");

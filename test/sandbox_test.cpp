@@ -500,13 +500,14 @@ void testRotaryAxisHoming() {
     printTestResult("Axis position matches homePosition (+180 deg)", axis.getPosition() == 180.0f);
 
     // 8. Limit protection (immediate stop + directional blocking)
+    axis.setPosition(0.0f);
     axis.enableLimitProtectionMin(true);
     axis.enableLimitProtectionMax(true);
     printTestResult("Limit protection min enabled", axis.isLimitProtectionMinEnabled());
     printTestResult("Limit protection max enabled", axis.isLimitProtectionMaxEnabled());
 
-    // Moving toward Min -> hitting Min stops driver
-    axis.run(10.0f, 50.0f, 100.0f, 100.0f, Stepper::Direction::Clockwise);
+    // Moving toward Min (negative/CW) -> hitting Min stops driver
+    axis.run(-10.0f, 50.0f, 100.0f, 100.0f);
     printTestResult("Driver is running before Min limit hit", driver.isRunning());
     endstopMin.simulateTrigger(true);
     printTestResult("Driver stopped when Min limit hit", !driver.isRunning());
@@ -516,15 +517,14 @@ void testRotaryAxisHoming() {
     printTestResult("Move away from triggered Min (CCW) is allowed", axis.isDirectionAllowed(Stepper::Direction::Counterclockwise));
 
     Stepper::Generic::RotaryAxis::RotaryAxisTask blockedTask;
-    blockedTask.angle = 10.0f;
+    blockedTask.angle = -10.0f;
     blockedTask.velocity = 50.0f;
     blockedTask.acceleration = 100.0f;
     blockedTask.deceleration = 100.0f;
-    blockedTask.direction = Stepper::Direction::Clockwise;
     printTestResult("RotaryAxis::run() rejects move into triggered Min", !axis.run(blockedTask));
 
     Stepper::Generic::RotaryAxis::RotaryAxisTask backoffTask = blockedTask;
-    backoffTask.direction = Stepper::Direction::Counterclockwise;
+    backoffTask.angle = 10.0f;
     printTestResult("RotaryAxis::run() allows back-off from triggered Min", axis.run(backoffTask));
     // Bounce on Min while backing off in CCW must NOT stop the driver
     endstopMin.simulateTrigger(true);
@@ -552,7 +552,7 @@ void testStepCountExactness() {
 
     // Exact homing back-off parameters: 90 deg at 2 deg/s, acc=20 deg/s^2, dec=20 deg/s^2
     axis.setPosition(0.0f);
-    axis.run(90.0f, 2.0f, 20.0f, 20.0f, Stepper::Direction::Counterclockwise);
+    axis.run(90.0f, 2.0f, 20.0f, 20.0f);
 
     uint32_t executedSteps = 0;
     while (axis.getState() != Stepper::State::Stopped && executedSteps < 1000) {
@@ -570,7 +570,7 @@ void testStepCountExactness() {
 
     // Also verify faster trapezoid move (stepsAcc > 0, stepsDec > 0)
     axis.setPosition(0.0f);
-    axis.run(90.0f, 180.0f, 100.0f, 100.0f, Stepper::Direction::Counterclockwise);
+    axis.run(90.0f, 180.0f, 100.0f, 100.0f);
     executedSteps = 0;
     while (axis.getState() != Stepper::State::Stopped && executedSteps < 1000) {
         generator.advanceStateAfterStep(1);
@@ -682,7 +682,9 @@ void testLinearAxis() {
     Stepper::Mock::Driver driver(pinEnable, pinStep, pinDir, 1);
     Stepper::Generic::Generator generator(driver);
     Stepper::Generic::Motor motor(generator, 200, 1.0f);
-    Stepper::Generic::LinearAxis axis(motor, 8.0f, 0.0f, 200.0f);
+    Stepper::Generic::LinearAxis axis(motor, 8.0f);
+    axis.setLimits(0.0f, 200.0f);
+    axis.setHomed(true);
 
     printTestResult("LinearAxis distanceMmPerRevolution == 8.0", axis.getDistanceMmPerRevolution() == 8.0f);
     printTestResult("LinearAxis min limit == 0.0 mm", axis.getMinPositionMm() == 0.0f);
@@ -692,7 +694,7 @@ void testLinearAxis() {
     axis.setPositionMm(10.0f);
     printTestResult("LinearAxis setPositionMm / getPositionMm", std::abs(axis.getPositionMm() - 10.0f) < 0.01f);
 
-    axis.run(40.0f, 80.0f, 200.0f, 200.0f, Stepper::Direction::Forward);
+    axis.run(40.0f, 80.0f, 200.0f, 200.0f);
     uint32_t steps = 0;
     while (axis.getState() != Stepper::State::Stopped && steps < 2000) {
         generator.advanceStateAfterStep(1);
@@ -702,8 +704,14 @@ void testLinearAxis() {
     printTestResult("LinearAxis position after 40 mm forward == 50.0 mm", std::abs(axis.getPositionMm() - 50.0f) < 0.01f);
 
     // Soft limit clamping: try moving 200 mm forward from 50 mm (should clamp to 150 mm -> 200 mm max)
-    axis.run(200.0f, 80.0f, 200.0f, 200.0f, Stepper::Direction::Forward);
+    axis.run(200.0f, 80.0f, 200.0f, 200.0f);
     printTestResult("LinearAxis clamps move exceeding maxLimit (150 mm = 3750 steps)", generator.getState().stepsTotal == 3750);
+    axis.stop();
+
+    // Soft limit clamping in negative direction: try moving -100 mm from 50 mm (should clamp to -50 mm -> 0 mm min)
+    axis.run(-100.0f, 80.0f, 200.0f, 200.0f);
+    printTestResult("LinearAxis clamps move below minLimit (-50 mm = 1250 steps, Backward)",
+                    generator.getState().stepsTotal == 1250 && generator.getState().targetDirection == Stepper::Direction::Backward);
     axis.stop();
 
     // Limit protection with Forward / Backward
