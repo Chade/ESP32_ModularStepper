@@ -39,10 +39,10 @@ bool Homing::homeAsync(Generic::Axis& axis, const Config& config, HomingCallback
             return false;
         }
     } else {
-        Generic::Axis::EndstopPosition target = (config.strategy == Strategy::Min)
-                                                ? Generic::Axis::EndstopPosition::Min
-                                                : Generic::Axis::EndstopPosition::Max;
-        if (!axis.hasEndstop(target)) {
+        Generic::Axis::EndstopPosition targetEndstop = (config.strategy == Strategy::Min)
+                                                        ? Generic::Axis::EndstopPosition::Min
+                                                        : Generic::Axis::EndstopPosition::Max;
+        if (!axis.hasEndstop(targetEndstop)) {
             LOG_WARN("Cannot start async homing: Target endstop not attached");
             return false;
         }
