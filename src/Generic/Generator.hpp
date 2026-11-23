@@ -4,8 +4,8 @@
 #include <stdint.h>
 #include <FixedPoints.h>
 
+#include "Helper.hpp"
 #include "Driver.hpp"
-
 
 using UQ20x12 = UFixed<20, 12>;
 
@@ -55,7 +55,7 @@ namespace Generic {
             UQ20x12 deceleration    = 0.0; // steps/s^2
 
             // Cumulative signed position across both step and velocity modes
-            int64_t positionSteps = 0;
+            int64_t stepsPosition = 0;
 
             // Distance mode state
             uint64_t stepsTotal = 0; // total steps requested
@@ -63,14 +63,15 @@ namespace Generic {
             uint64_t stepsAcc   = 0; // steps in acceleration phase
             uint64_t stepsConst = 0; // steps in constant velocity phase
             uint64_t stepsDec   = 0; // steps in deceleration phase
-
-            void updateState(State newState) {
-                if (newState != currentState) {
-                    previousState = currentState;
-                    currentState = newState;    
-                }
-            };
         } state_;
+
+        void updateState(GeneratorState& state, State newState) const {
+            if (newState != state.currentState) {
+                state.previousState = state.currentState;
+                state.currentState = newState;
+                updateStateEvent(newState);
+            }
+        };
 
         GeneratorState getState() const {
             return state_;
@@ -93,7 +94,7 @@ namespace Generic {
 
             // Position state
             if (resetPosition) {
-                state_.positionSteps = 0;
+                state_.stepsPosition = 0;
             }
 
             // Distance mode state
@@ -106,6 +107,8 @@ namespace Generic {
 
         bool checkState(GeneratorState state) const;
 
+        virtual State waitForState(State state, uint32_t timeout_ms = UINT32_MAX) const = 0;
+
         float getVelocity() const {
             return static_cast<float>(state_.currentVelocity);
         };
@@ -115,11 +118,11 @@ namespace Generic {
         };
 
         int64_t getPositionSteps() const {
-            return state_.positionSteps;
+            return state_.stepsPosition;
         };
 
         void setPositionSteps(int64_t steps) {
-            state_.positionSteps = steps;
+            state_.stepsPosition = steps;
         };
 
         Driver& driver() {
@@ -138,8 +141,8 @@ namespace Generic {
             advanceStateAfterStep(steps, state_);
         };
         
-        static void computeStepProfile(GeneratorState& state);
-        static void computeStepProfile_v2(GeneratorState& state);
+        void computeStepProfile(GeneratorState& state) const;
+        void computeStepProfile_v2(GeneratorState& state) const;
         
     private:
         void initializeStateBeforeStep(const GeneratorTask&, GeneratorState& state) const;
@@ -147,11 +150,13 @@ namespace Generic {
         uint32_t computeStepBatchSize(const GeneratorState& state) const;
         float computeStepPeriodUs(UQ20x12 velocity) const;
         
-        static UQ20x12 computeDeltaV(UQ20x12 acceleration, uint32_t steps, UQ20x12 velocity);
-        static UQ20x12 computeVelocity(UQ20x12 acceleration, UQ20x12 currentVelocity, UQ20x12 targetVelocity, uint32_t steps);
-        static uint64_t computeRampSteps(UQ20x12 dv, UQ20x12 acceleration);
+        UQ20x12 computeDeltaV(UQ20x12 acceleration, uint32_t steps, UQ20x12 velocity) const;
+        UQ20x12 computeVelocity(UQ20x12 acceleration, UQ20x12 currentVelocity, UQ20x12 targetVelocity, uint32_t steps) const;
+        uint64_t computeRampSteps(UQ20x12 dv, UQ20x12 acceleration) const;
 
         static void callbackOnStepDone(uint32_t stepsDone, uint32_t& stepsToDo, float& pulsePeriod_us, float& pulsePeriodIncrement_us, void* user_ctx);
+
+        virtual void updateStateEvent(State state) const = 0;
 
         Driver& driver_;
 

@@ -5,10 +5,9 @@
 #include <cstdint>
 #include <limits>
 
+#include "Helper.hpp"
 #include "Motor.hpp"
 #include "Endstop.hpp"
-#include "Helper.hpp"
-#include "Log.hpp"
 
 namespace Stepper {
 namespace Generic {
@@ -62,8 +61,9 @@ public:
     };
 
     // Limit switch protection
-    void enableLimitProtectionMin(bool enable = true);
-    void enableLimitProtectionMax(bool enable = true);
+    bool enableLimitProtection(EndstopPosition pos, bool enable = true);
+    bool enableLimitProtectionMin(bool enable = true);
+    bool enableLimitProtectionMax(bool enable = true);
 
     bool isLimitProtectionMinEnabled() const {
         return limitProtectionMinEnabled_;
@@ -122,7 +122,11 @@ public:
     State getState() const {
         return motor_.getState();
     };
-    
+
+    bool waitForState(State state, uint32_t timeout_ms = UINT32_MAX) {
+        return motor_.waitForState(state, timeout_ms);
+    };
+
     Generic::Motor& motor() {
         return motor_;
     };

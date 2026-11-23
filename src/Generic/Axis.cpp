@@ -1,4 +1,5 @@
 #include "Axis.hpp"
+#include "Log.hpp"
 
 namespace Stepper {
 namespace Generic {
@@ -58,45 +59,70 @@ bool Axis::isDirectionAllowed(Direction direction) const {
 
     if (limitProtectionMinEnabled_ && isEndstopTriggered(EndstopPosition::Min) &&
         compare_enums(EndstopPosition::Min, direction)) {
-        LOG_WARN("Move blocked: Min limit switch is triggered");
         return false;
     }
 
     if (limitProtectionMaxEnabled_ && isEndstopTriggered(EndstopPosition::Max) &&
         compare_enums(EndstopPosition::Max, direction)) {
-        LOG_WARN("Move blocked: Max limit switch is triggered");
         return false;
     }
 
     return true;
 }
 
-void Axis::enableLimitProtectionMin(bool enable) {
-    limitProtectionMinEnabled_ = enable;
-    if (enable && endstopMin_) {
-        endstopMin_->registerCallback(Generic::Endstop::Edge::Both, [this](Generic::Endstop::Edge) {
-            Direction curDir = motor_.generator().getState().currentDirection;
-            if (limitProtectionMinEnabled_ && !isHoming_ && endstopMin_->isTriggered() &&
-                !compare_enums(EndstopPosition::Max, curDir)) {
-                LOG_WARN("Min limit switch triggered! Halting motion.");
-                stop();
-            }
-        });
+bool Axis::enableLimitProtection(EndstopPosition pos, bool enable) {
+    if (pos == EndstopPosition::Min) {
+        return enableLimitProtectionMin(enable);
     }
+    else if (pos == EndstopPosition::Max) {
+        return enableLimitProtectionMax(enable);
+    }
+
+    return false;
 }
 
-void Axis::enableLimitProtectionMax(bool enable) {
-    limitProtectionMaxEnabled_ = enable;
-    if (enable && endstopMax_) {
-        endstopMax_->registerCallback(Generic::Endstop::Edge::Both, [this](Generic::Endstop::Edge) {
-            Direction curDir = motor_.generator().getState().currentDirection;
-            if (limitProtectionMaxEnabled_ && !isHoming_ && endstopMax_->isTriggered() &&
-                !compare_enums(EndstopPosition::Min, curDir)) {
-                LOG_WARN("Max limit switch triggered! Halting motion.");
-                stop();
+bool Axis::enableLimitProtectionMin(bool enable) {
+    if (endstopMin_ == nullptr) {
+        LOG_ERROR("No endstop at position MIN");
+        limitProtectionMinEnabled_ = false;
+        return false;
+    }
+
+    if (enable && !limitProtectionMinEnabled_) {
+        endstopMin_->registerCallback(Generic::Endstop::Edge::Both, [this](Generic::Endstop::Edge) {
+            if (limitProtectionMinEnabled_ && endstopMin_->isTriggered()) {
+                Direction direction = motor_.generator().getState().currentDirection;
+                if (compare_enums(EndstopPosition::Min, direction)) {
+                    stop();
+                    LOG_WARN("Motion halted: Min limit switch triggered!");
+                }
             }
         });
     }
+    limitProtectionMinEnabled_ = enable;
+    return true;
+}
+
+bool Axis::enableLimitProtectionMax(bool enable) {
+    if (endstopMax_ == nullptr) {
+        LOG_ERROR("No endstop at position MAX");
+        limitProtectionMaxEnabled_ = false;
+        return false;
+    }
+
+    if (enable && !limitProtectionMaxEnabled_) {
+        endstopMax_->registerCallback(Generic::Endstop::Edge::Both, [this](Generic::Endstop::Edge) {
+            if (limitProtectionMaxEnabled_ && endstopMax_->isTriggered()) {
+                Direction direction = motor_.generator().getState().currentDirection;
+                if (compare_enums(EndstopPosition::Max, direction)) {
+                    stop();
+                    LOG_WARN("Motion halted: Max limit switch triggered!");
+                }
+            }
+        });
+    }
+    limitProtectionMaxEnabled_ = enable;
+    return true;
 }
 
 } // namespace Generic

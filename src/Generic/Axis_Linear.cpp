@@ -1,7 +1,8 @@
+#include <cassert>
+#include <algorithm>
+
 #include "Axis_Linear.hpp"
 #include "Log.hpp"
-#include <algorithm>
-#include <cassert>
 
 namespace Stepper {
 namespace Generic {

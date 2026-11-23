@@ -3,8 +3,8 @@
 
 #include <functional>
 
-#include "Pin.hpp"
 #include "Helper.hpp"
+#include "Pin.hpp"
 
 namespace Stepper {
 namespace Generic {

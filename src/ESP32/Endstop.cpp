@@ -1,5 +1,6 @@
-#include "Endstop.hpp"
 #include <esp_timer.h>
+
+#include "Endstop.hpp"
 
 namespace Stepper {
 namespace ESP32 {

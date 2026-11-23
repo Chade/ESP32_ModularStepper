@@ -1,14 +1,14 @@
 #include <ESP32RotaryEncoder.h>
 //#include "FastRotaryEncoder.hpp"
 
-#include "src/Generic/Log.hpp"
 #include "src/ESP32/Pin.hpp"
 #include "src/ESP32/Driver_MCPWM.hpp"
-#include "src/Generic/Generator.hpp"
-#include "src/Generic/Motor.hpp"
+#include "src/ESP32/Generator.hpp"
 #include "src/ESP32/Endstop.hpp"
-#include "src/Generic/Axis_Rotary.hpp"
 #include "src/ESP32/Homing.hpp"
+#include "src/Generic/Motor.hpp"
+#include "src/Generic/Axis_Rotary.hpp"
+#include "src/Generic/Log.hpp"
 
 
 //FastRotaryEncoder encoder(33, 32, 35, 100, 100000, 100);
@@ -27,7 +27,7 @@ Stepper::ESP32::Endstop endstopMin(pinEndstopMin);
 Stepper::ESP32::Endstop endstopMax(pinEndstopMax);
 
 Stepper::ESP32::MCPWM::Driver driver(pinEnable, pinStep, pinDirection, 16);
-Stepper::Generic::Generator generator(driver);
+Stepper::ESP32::Generator generator(driver);
 Stepper::Generic::Motor motor(generator, 200, 1.0f);
 Stepper::Generic::RotaryAxis axis(motor, 360.0f, false);
 //Stepper::Generic::Motor::MotorTask task;
@@ -44,32 +44,30 @@ void setup() {
   while (!Serial) { vTaskDelay(pdMS_TO_TICKS(1000)); }
 
   // Configure endstop debounce (5 ms) and attach to rotary axis
-  endstopMin.setDebounceUs(5000);
-  endstopMax.setDebounceUs(5000);
+  endstopMin.setDebounceUs(10000);
+  endstopMax.setDebounceUs(10000);
   axis.setEndstops(&endstopMin, &endstopMax);
 
   //task.revolutions = 0.0f;
   task.angle = 0.0f;
   task.velocity = 1.0;
-  task.acceleration = 100.0f;
-  task.deceleration = 100.0f;
+  task.acceleration = 10.0f;
+  task.deceleration = 10.0f;
 
   rotaryEncoder.setEncoderType( EncoderType::HAS_PULLUP );
 	rotaryEncoder.setBoundaries(-360, 360, false);
   rotaryEncoder.setStepValue(1);
-  //rotaryEncoder.setEncoderValue(task.revolutions);
-  //rotaryEncoder.setEncoderValue(task.angle);
-  rotaryEncoder.setEncoderValue(task.velocity);
+  rotaryEncoder.setEncoderValue(task.angle);
 
   // Initialize dual-endstop homing (Min -> Max) with very slow speeds for safe testing
   Stepper::Generic::Homing::Config homingCfg;
   homingCfg.strategy = Stepper::Generic::Homing::Strategy::MinThenMax;
-  homingCfg.fastVelocity = 10.0f;      // 10 deg/s
-  homingCfg.slowVelocity = 2.0f;       // 2 deg/s
-  homingCfg.acceleration = 20.0f;      // 20 deg/s^2
-  homingCfg.deceleration = 20.0f;      // 20 deg/s^2
-  homingCfg.retractDistance = 5.0f;    // 5 deg back-off between fast & slow approach
-  homingCfg.backoffDistance = 5.0f;    // 5 deg final pull-off so motor doesn't rest on Max switch
+  homingCfg.fastVelocity = 100.0f;       // 10 deg/s
+  homingCfg.slowVelocity = 1.0f;        // 2 deg/s
+  homingCfg.acceleration = 100.0f;      // 20 deg/s^2
+  homingCfg.deceleration = 100.0f;      // 20 deg/s^2
+  homingCfg.retractDistance = 5.0f;     // 5 deg back-off between fast & slow approach
+  homingCfg.backoffDistance = 10.0f;     // 5 deg final pull-off so motor doesn't rest on Max switch
   homingCfg.maxTravelDistance = 270.0f; // abort if switch not found within 270 deg
   homingCfg.homePosition = 0.0f;
   homing.setConfig(homingCfg);
@@ -77,9 +75,7 @@ void setup() {
   rotaryEncoder.onTurned([](long value) {
     Serial.print("Angle: ");
     Serial.println(value);
-    //task.revolutions = value/10.0f;
-    //task.angle = value;
-    task.velocity = value/10.0f;
+    task.angle = value;
   });
 
   rotaryEncoder.onPressed([](unsigned long duration) {
@@ -94,7 +90,6 @@ void setup() {
       });
       return;
     }
-    //motor.run(task);
     axis.run(task);
   });
 

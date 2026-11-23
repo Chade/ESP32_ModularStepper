@@ -179,7 +179,5 @@ namespace ESP32 {
     uint64_t Driver::getStepsFast() const {
         return numStepsDone_ + isrStepCount_;
     }
-
-
 } // namespace ESP32
 } // namespace Stepper

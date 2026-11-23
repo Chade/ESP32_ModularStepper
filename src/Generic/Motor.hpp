@@ -1,8 +1,9 @@
 #ifndef STEPPER_MOTOR_HPP
 #define STEPPER_MOTOR_HPP
 
-#include <cassert>
 #include <cmath>
+
+#include "Helper.hpp"
 #include "Generator.hpp"
 
 namespace Stepper {
@@ -52,7 +53,10 @@ namespace Generic {
             return generator_.getState().currentState;
         };
 
-        
+        bool waitForState(State state, uint32_t timeout_ms = UINT32_MAX) {
+            return generator_.waitForState(state, timeout_ms) == state;
+        };
+
         Generic::Generator& generator() {
             return generator_;
         };

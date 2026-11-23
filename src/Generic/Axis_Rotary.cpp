@@ -1,6 +1,7 @@
+#include <cassert>
+
 #include "Axis_Rotary.hpp"
 #include "Log.hpp"
-#include <cassert>
 
 namespace Stepper {
 namespace Generic {

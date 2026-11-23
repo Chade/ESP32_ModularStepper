@@ -3,7 +3,6 @@
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
-#include <functional>
 
 #include "../Generic/Helper.hpp"
 #include "../Generic/Driver.hpp"
@@ -34,7 +33,7 @@ namespace ESP32 {
         static void task(void *args);
 
         // Update the params for the next step cycle
-        void update(uint32_t stepsDone, uint32_t stepsToDo, float pulsePeriodNew, float pulsePeriodIncrement) override= 0;
+        void update(uint32_t stepsDone, uint32_t stepsToDo, float pulsePeriodNew, float pulsePeriodIncrement) override = 0;
 
         bool notifyStepDone(bool immidiately = false);
         bool IRAM_ATTR notifyStepDoneFromISR(BaseType_t* pxHigherPriorityTaskWoken, bool immidiately = false);

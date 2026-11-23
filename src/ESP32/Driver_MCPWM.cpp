@@ -1,9 +1,10 @@
+#include <hal/mcpwm_types.h>
+#include <driver/mcpwm_gen.h>
+#include <driver/mcpwm_sync.h>
+#include <driver/mcpwm_timer.h>
+
 #include "Driver_MCPWM.hpp"
 #include "../Generic/Log.hpp"
-#include "driver/mcpwm_gen.h"
-#include "hal/mcpwm_types.h"
-#include "driver/mcpwm_sync.h"
-#include "driver/mcpwm_timer.h"
 
 namespace Stepper {
 namespace ESP32 {

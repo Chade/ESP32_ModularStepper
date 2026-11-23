@@ -19,6 +19,7 @@ namespace Generic {
         LOG_INFO("Initialize generator state");
         // Initialize internal state from task
         initializeStateBeforeStep(task, state_);
+        updateStateEvent(state_.currentState);
 
         // Perform some sanity checks
         checkState(state_);
@@ -83,7 +84,7 @@ namespace Generic {
     }
 
     void Generator::stop() {
-        state_.updateState(State::Stopped);
+        updateState(state_, State::Stopped);
         driver_.stop();
         state_.currentVelocity = 0.0;
         state_.targetVelocity = 0.0;
@@ -103,7 +104,7 @@ namespace Generic {
     /// Avoids the precision loss from computing the tiny dt = steps/velocity first.
     /// Mathematically: dv = acceleration * steps / velocity
     /// In raw representation: dv_raw = acceleration_raw * steps * Scale / velocity_raw
-    UQ20x12 Generator::computeDeltaV(UQ20x12 acceleration, uint32_t steps, UQ20x12 velocity) {
+    UQ20x12 Generator::computeDeltaV(UQ20x12 acceleration, uint32_t steps, UQ20x12 velocity) const {
         constexpr uint64_t scale = UQ20x12::Scale; // 2^12 = 4096
 
         uint64_t acc_raw = static_cast<uint64_t>(acceleration.getInternal());
@@ -148,7 +149,7 @@ namespace Generic {
    /// Acceleration: dv = sqrt(v² + 2*a*s) - v
    /// Deceleration: dv = v - sqrt(max(0, v² - 2*d*s))
 
-    UQ20x12 Generator::computeVelocity(UQ20x12 acceleration, UQ20x12 currentVelocity, UQ20x12 targetVelocity, uint32_t steps) {
+    UQ20x12 Generator::computeVelocity(UQ20x12 acceleration, UQ20x12 currentVelocity, UQ20x12 targetVelocity, uint32_t steps) const {
         constexpr uint64_t scale = UQ20x12::Scale; // 2^12 = 4096
         
         if (steps == 0) {
@@ -198,7 +199,7 @@ namespace Generic {
     /// Compute s = dv² / (2 * acceleration) as integer step count using 64-bit intermediates.
     /// Avoids overflow from squaring large velocity deltas in 32-bit fixed-point.
     /// Max safe dv: ~4.3 billion raw (full UQ20x12 range), since dv_raw² < 2^64.
-    uint64_t Generator::computeRampSteps(UQ20x12 dv, UQ20x12 acceleration) {
+    uint64_t Generator::computeRampSteps(UQ20x12 dv, UQ20x12 acceleration) const {
         constexpr uint64_t scale = UQ20x12::Scale; // 2^12 = 4096
         
         if (acceleration == 0) {
@@ -231,7 +232,7 @@ namespace Generic {
         return static_cast<float>(period_us);
     }
 
-    void Generator::computeStepProfile(GeneratorState& state) {
+    void Generator::computeStepProfile(GeneratorState& state) const {
         uint64_t stepsAcc = 0;
         // Check if we need to change direction
         if (state.targetDirection != state.currentDirection) {
@@ -308,7 +309,7 @@ namespace Generic {
             }
     }
 
-    void Generator::computeStepProfile_v2(GeneratorState& state) {
+    void Generator::computeStepProfile_v2(GeneratorState& state) const {
         constexpr uint64_t scale = UQ20x12::Scale; // 2^12 = 4096
         
         uint64_t v_start_raw = static_cast<uint64_t>((state.currentDirection == state.targetDirection) ? state.currentVelocity.getInternal() : 0);
@@ -468,7 +469,7 @@ namespace Generic {
         }
 
         // Update position based on steps taken and current direction
-        state.positionSteps += static_cast<int64_t>(steps) * cast_enum_to_base(state.currentDirection);
+        state.stepsPosition += static_cast<int64_t>(steps) * cast_enum_to_base(state.currentDirection);
 
         if (state.stepsTotal > 0) {
             if (state.currentDirection == state.targetDirection) {
@@ -497,14 +498,14 @@ namespace Generic {
         if (state.currentDirection != state.targetDirection) {
             // Need to change direction: decelerate to stand-still first
             if (state.currentVelocity > 0) {
-                state.updateState(State::Decelerating);
+                updateState(state, State::Decelerating);
                 state.currentVelocity = computeVelocity(state.deceleration, state.currentVelocity, UQ20x12(0), steps);
             }
             if (state.currentVelocity == 0) {
                 LOG_INFO("Do direction change");
                 // Reached stand-still, change direction
                 // We will not transition to State:Stopped, to indicate the movement is not finished yet
-                state.updateState(State::Accelerating);
+                updateState(state, State::Accelerating);
                 state.doDirectionChange = true;
                 state.currentVelocity = minVelocity_;
             }
@@ -512,17 +513,17 @@ namespace Generic {
         else {
             // Accelerate towards target velocity
             if (state.currentVelocity < state.targetVelocity) {
-                state.updateState(State::Accelerating);
+                updateState(state, State::Accelerating);
                 state.currentVelocity = computeVelocity(state.acceleration, state.currentVelocity, state.targetVelocity, steps);
             }
             // Decelerate towards target velocity
             else if (state.currentVelocity > state.targetVelocity) {
-                state.updateState(State::Decelerating);
+                updateState(state, State::Decelerating);
                 state.currentVelocity = computeVelocity(state.deceleration, state.currentVelocity, state.targetVelocity, steps);
             }
             // System reached target velocity
             else if (state.currentVelocity == state.targetVelocity) {
-                state.updateState(State::Running);
+                updateState(state, State::Running);
             }
 
             // Check if system has reached standstill
@@ -533,7 +534,7 @@ namespace Generic {
                 }
                 else {
                     LOG_INFO("Standstill reached (%llu/%llu/%lu)", state.stepsDone, state.stepsTotal, steps);
-                    state.updateState(State::Stopped);
+                    updateState(state, State::Stopped);
                 }
             }
         }

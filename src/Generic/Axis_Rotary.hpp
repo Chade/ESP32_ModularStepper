@@ -2,6 +2,7 @@
 #define STEPPER_AXIS_ROTARY_HPP
 
 #include <cassert>
+
 #include "Axis.hpp"
 #include "Motor.hpp"
 

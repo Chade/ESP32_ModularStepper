@@ -4,6 +4,7 @@
 #include <driver/mcpwm_prelude.h>
 #include <driver/mcpwm_types.h>
 
+#include "../Generic/Pin.hpp"
 #include "Driver.hpp"
 
 

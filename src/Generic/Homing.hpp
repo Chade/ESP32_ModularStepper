@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <functional>
 
+#include "Helper.hpp"
 #include "Axis.hpp"
 
 namespace Stepper {
@@ -40,8 +41,6 @@ public:
         float maxTravelDistance = 0.0f;   // max search distance in axis units before aborting (0 = unlimited)
         float homePosition = 0.0f;        // coordinate assigned at the first latched endstop
     };
-
-    using YieldFn = std::function<void(uint32_t delayMs)>;
 
     Homing() = default;
     explicit Homing(const Config& defaultConfig) : config_(defaultConfig) {};
@@ -82,33 +81,24 @@ public:
     bool homeMaxMin(Axis& axis);
     bool homeMaxMin(Axis& axis, const Config& config);
 
-    // Custom yield hook (used on host sandbox testing; defaults to vTaskDelay on ESP32)
-    void setYieldFunction(YieldFn fn) { yieldFn_ = std::move(fn); };
-
 protected:
-    // Reusable single-endstop latch sequence (Step 0 initial retract -> Phase 1 fast -> Phase 2 retract -> Phase 3 slow latch)
+    bool approachEndstop(Axis& axis, Axis::EndstopPosition endstopPos, float velocity, float acceleration, float deceleration, float distance = 0.0f);
+    bool backoffFromEndstop(Axis& axis, Axis::EndstopPosition endstopPos, float velocity, float acceleration, float dceleration, float distance);
     bool homeToEndstop(Axis& axis, Axis::EndstopPosition endstopPos, const Config& config);
-
-    // Reusable post-latch pull-off sequence (Phase 4)
-    bool backoffFromEndstop(Axis& axis, Axis::EndstopPosition endstopPos, const Config& config);
-    bool backoffFromEndstop(Axis& axis, Axis::EndstopPosition endstopPos, float distance, float velocity, float acceleration, float dceleration);
 
     static bool isDualEndstopStrategy(Strategy strategy) {
         return strategy == Strategy::MinThenMax || strategy == Strategy::MaxThenMin;
     };
 
     static Direction searchDirectionFor(Axis::EndstopPosition pos) {
-        return static_cast<Direction>(cast_enum_to_base(pos));
+        return static_cast<Direction>(pos);
     };
 
-    void yieldMs(uint32_t delayMs) const;
     static void restoreLimitProtection(Axis& axis, Axis::EndstopPosition pos);
     void finalizeAxisState(Axis& axis);
 
     Config config_;
     State state_ {State::Idle};
-
-    YieldFn yieldFn_ {nullptr};
 };
 
 } // namespace Generic
