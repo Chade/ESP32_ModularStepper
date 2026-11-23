@@ -27,20 +27,42 @@ namespace Stepper
         return static_cast<int64_t>(cast_enum_to_base(e1)) == static_cast<int64_t>(cast_enum_to_base(e2));
     };
 
+    template <typename T>
+    constexpr int sign(T val) {
+        return (T(0) <=  val) ? 1 : -1;
+    }
+
+    template <typename T> 
+    constexpr int signum(T val) {
+        return (T(0) < val) - (val < T(0));
+    }
+    
     enum class Direction : int8_t
     {
+        Negative = -1,
         Down = -1,
         Backward = -1,
         Clockwise = -1,
         Neutral = 0,
         Counterclockwise = 1,
         Forward = 1,
-        Up = 1
+        Up = 1,
+        Positive = 1
     };
 
     inline constexpr Direction reverseDirection(Direction dir) {
         return static_cast<Direction>(-cast_enum_to_base(dir));
     }
+    
+    template <typename T>
+    constexpr Direction getDirection(T v) {
+        return static_cast<Direction>(sign(v));
+    };
+
+    template <typename T1, typename T2>
+    constexpr Direction getDirection(T1 v1, T2 v2) {
+        return static_cast<Direction>(sign(v1) * sign(v2));
+    };
 
     enum class State : uint8_t
     {

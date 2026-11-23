@@ -34,7 +34,7 @@ void Homing::restoreLimitProtection(Axis& axis, Axis::EndstopPosition pos) {
 
 void Homing::finalizeAxisState(Axis& axis) {
     auto& generator = axis.motor().generator();
-    generator.getDriver().reset(true);
+    generator.driver().reset(true);
     generator.resetState(false); // preserve calibrated positionSteps
 
     axis.setHomed(true);
@@ -49,11 +49,7 @@ bool Homing::homeToEndstop(Axis& axis, Axis::EndstopPosition endstopPos, const C
                  (endstopPos == Axis::EndstopPosition::Min) ? "Min" : "Max");
         return false;
     }
-
-    Direction searchDir = searchDirectionFor(endstopPos);
-    Direction retractDir = reverseDirection(searchDir);
-    float retractVel = (config.slowVelocity > 0.0f) ? config.slowVelocity : config.fastVelocity;
-
+    
     volatile bool endstopTriggered = false;
     targetEndstop->registerCallback(Generic::Endstop::Edge::Both, [&endstopTriggered, targetEndstop, &axis, this](Generic::Endstop::Edge) {
         if ((state_ == State::FastApproach || state_ == State::SlowApproach) && targetEndstop->isTriggered()) {
@@ -61,14 +57,20 @@ bool Homing::homeToEndstop(Axis& axis, Axis::EndstopPosition endstopPos, const C
             axis.stop();
         }
     });
-
+    
     auto failEndstop = [&]() {
         axis.stop();
         targetEndstop->unregisterCallback();
         restoreLimitProtection(axis, endstopPos);
         return false;
     };
-
+    
+    Direction searchDir = searchDirectionFor(endstopPos);
+    Direction retractDir = reverseDirection(searchDir);
+    float searchVelFast = fabs(config.fastVelocity) * sign(cast_enum_to_base(searchDir));
+    float searchVelSlow = fabs(config.slowVelocity) * sign(cast_enum_to_base(searchDir));
+    float retractVel = fabs(config.slowVelocity) * sign(cast_enum_to_base(retractDir));
+    
     // Step 0: Initial retract if already triggered before approaching
     if (targetEndstop->isTriggered()) {
         LOG_INFO("Endstop already triggered prior to homing, retracting (%.2f)...", config.retractDistance);
@@ -77,7 +79,7 @@ bool Homing::homeToEndstop(Axis& axis, Axis::EndstopPosition endstopPos, const C
             return failEndstop();
         }
         state_ = State::Retracting;
-        axis.run(config.retractDistance, retractVel, config.acceleration, config.deceleration, retractDir);
+        axis.run(config.retractDistance, retractVel, config.acceleration, config.deceleration);
 
         while (axis.getState() != Stepper::State::Stopped) {
             yieldMs(1);
@@ -96,9 +98,9 @@ bool Homing::homeToEndstop(Axis& axis, Axis::EndstopPosition endstopPos, const C
     state_ = State::FastApproach;
     endstopTriggered = false;
     if (config.maxTravelDistance > 0.0f) {
-        axis.run(config.maxTravelDistance, config.fastVelocity, config.acceleration, config.deceleration, searchDir);
+        axis.run(config.maxTravelDistance, searchVelFast, config.acceleration, config.deceleration);
     } else {
-        axis.run(config.fastVelocity, config.acceleration, config.deceleration, searchDir);
+        axis.run(searchVelFast, config.acceleration, config.deceleration);
     }
 
     while (!endstopTriggered && !targetEndstop->isTriggered()) {
@@ -116,9 +118,9 @@ bool Homing::homeToEndstop(Axis& axis, Axis::EndstopPosition endstopPos, const C
 
     // Phase 2: Retract / Back-off
     LOG_INFO("Homing Phase 2: Retracting (%.2f)...", config.retractDistance);
-    if (config.retractDistance > 0.0f) {
+    if (config.retractDistance != 0.0f) {
         state_ = State::Retracting;
-        axis.run(config.retractDistance, retractVel, config.acceleration, config.deceleration, retractDir);
+        axis.run(config.retractDistance, retractVel, config.acceleration, config.deceleration);
 
         while (axis.getState() != Stepper::State::Stopped) {
             yieldMs(1);
@@ -138,9 +140,9 @@ bool Homing::homeToEndstop(Axis& axis, Axis::EndstopPosition endstopPos, const C
     endstopTriggered = false;
     float slowMaxDistance = (config.retractDistance > 0.0f) ? (config.retractDistance * 2.0f) : config.maxTravelDistance;
     if (slowMaxDistance > 0.0f) {
-        axis.run(slowMaxDistance, config.slowVelocity, config.acceleration, config.deceleration, searchDir);
+        axis.run(slowMaxDistance, searchVelSlow, config.acceleration, config.deceleration);
     } else {
-        axis.run(config.slowVelocity, config.acceleration, config.deceleration, searchDir);
+        axis.run(searchVelSlow, config.acceleration, config.deceleration);
     }
 
     while (!endstopTriggered && !targetEndstop->isTriggered()) {
@@ -168,11 +170,11 @@ bool Homing::backoffFromEndstop(Axis& axis, Axis::EndstopPosition endstopPos, co
 
     Generic::Endstop* targetEndstop = axis.getEndstop(endstopPos);
     Direction retractDir = reverseDirection(searchDirectionFor(endstopPos));
-    float retractVel = (config.slowVelocity > 0.0f) ? config.slowVelocity : config.fastVelocity;
+    float retractVel = fabs(config.slowVelocity) * sign(cast_enum_to_base(retractDir));
 
     LOG_INFO("Homing Phase 4: Backing off switch (%.2f)...", config.backoffDistance);
     state_ = State::BackingOff;
-    axis.run(config.backoffDistance, retractVel, config.acceleration, config.deceleration, retractDir);
+    axis.run(config.backoffDistance, retractVel, config.acceleration, config.deceleration);
 
     while (axis.getState() != Stepper::State::Stopped) {
         yieldMs(1);
@@ -244,9 +246,7 @@ bool Homing::home(Axis& axis, const Config& config) {
     }
 
     // Single-endstop strategy (Strategy::Min or Strategy::Max)
-    const Axis::EndstopPosition targetEndstop = (config.strategy == Strategy::Min)
-                                                ? Axis::EndstopPosition::Min
-                                                : Axis::EndstopPosition::Max;
+    const Axis::EndstopPosition targetEndstop = static_cast<Axis::EndstopPosition>(cast_enum_to_base(config.strategy));
     if (!axis.hasEndstop(targetEndstop)) {
         LOG_WARN("Cannot home: Endstop %s not configured",
                  (targetEndstop == Axis::EndstopPosition::Min) ? "Min" : "Max");

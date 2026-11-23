@@ -7,10 +7,8 @@ namespace Generic {
 
     Motor::Motor(Generic::Generator& generator, uint32_t stepsPerRevolution, float gearRatio)
             : generator_(generator), stepsPerRevolution_(stepsPerRevolution), gearRatio_(gearRatio) {
-        assert(stepsPerRevolution_ > 0);
-        assert(gearRatio_ > 0.0f);
         stepsPerRevolutionGeared_ = stepsPerRevolution_ * gearRatio_;
-        uint8_t microsteps = generator_.getDriver().getMicrosteps();
+        uint8_t microsteps = generator_.driver().getMicrosteps();
         if (microsteps > 1) {
             stepsPerRevolutionGeared_ *= microsteps;
         }
@@ -22,27 +20,25 @@ namespace Generic {
         genTask.velocity = revolutionsToSteps(task.velocity);
         genTask.acceleration = revolutionsToSteps(task.acceleration);
         genTask.deceleration = revolutionsToSteps(task.deceleration);
-        genTask.direction = task.direction;
+        genTask.direction = getDirection(task.revolutions, task.velocity);
         return generator_.run(genTask);
     }
 
-    void Motor::run(float targetVelocity, float acceleration, float deceleration, Direction direction) {
+    void Motor::run(float targetVelocity, float acceleration, float deceleration) {
         MotorTask task;
         task.revolutions = 0.0f;
         task.velocity = targetVelocity;
         task.acceleration = acceleration;
         task.deceleration = deceleration;
-        task.direction = direction;
         run(task);
     }
 
-    void Motor::run(float revolutions, float targetVelocity, float acceleration, float deceleration, Direction direction) {
+    void Motor::run(float revolutions, float targetVelocity, float acceleration, float deceleration) {
         MotorTask task;
         task.revolutions = revolutions;
         task.velocity = targetVelocity;
         task.acceleration = acceleration;
         task.deceleration = deceleration;
-        task.direction = direction;
         run(task);
     }
 

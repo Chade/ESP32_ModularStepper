@@ -10,7 +10,7 @@ namespace Generic {
     class Motor {
     public:
         Motor() = delete;
-        Motor(Generic::Generator& generator, uint32_t stepsPerRevolution = 200, float gearRatio = 1.0);
+        explicit Motor(Generic::Generator& generator, uint32_t stepsPerRevolution = 200, float gearRatio = 1.0);
         virtual ~Motor() = default;
 
         struct MotorTask {
@@ -18,12 +18,11 @@ namespace Generic {
             float velocity = 0.0;
             float acceleration = 0.0;
             float deceleration = 0.0;
-            Direction direction = Direction::Neutral;
         };
 
         bool run(const MotorTask& task);
-        void run(float targetVelocity, float acceleration, float deceleration, Direction direction);
-        void run(float revolutions, float targetVelocity, float acceleration, float deceleration, Direction direction);
+        void run(float targetVelocity, float acceleration, float deceleration);
+        void run(float revolutions, float targetVelocity, float acceleration, float deceleration);
         
         void stop() {
             generator_.stop();
@@ -67,15 +66,15 @@ namespace Generic {
             return (revolutions * stepsPerRevolutionGeared_);
         };
 
-        inline float stepsToRevolutions(float steps) const {
-            return (steps / stepsPerRevolutionGeared_);
+        inline float stepsToRevolutions(uint32_t steps) const {
+            return (static_cast<float>(steps) / static_cast<float>(stepsPerRevolutionGeared_));
         };
 
         Generic::Generator& generator_;
         State state_ = State::Undefined;
         uint32_t stepsPerRevolution_;
         float gearRatio_;
-        uint32_t stepsPerRevolutionGeared_;
+        int32_t stepsPerRevolutionGeared_;
     };
 } // namespace Generic
 } // namespace Stepper

@@ -12,48 +12,61 @@ RotaryAxis::RotaryAxis(Generic::Motor& motor, float angleDegPerRevolution, bool 
 }
 
 bool RotaryAxis::run(const RotaryAxisTask& task) {
-    if (!isDirectionAllowed(task.direction)) {
+    if (!isDirectionAllowed(getDirection(task.angle, task.velocity))) {
         return false;
     }
 
-    float angle_deg = task.angle;
-    if (!continuous_ && !isHoming_) {
-        if (angle_deg < minLimit_) {
-            LOG_WARN("Angle %.2f deg is below minimum angle %.2f deg", angle_deg, minLimit_);
-            angle_deg = minLimit_;
+    if (!task.moveRelative && !isHomed_) {
+        LOG_WARN("Cannot move to absolute position because axis is not homed");
+        return false;
+    }
+
+    float angle;
+    float targetAngle;
+    float currentAngle = getPosition();
+    if (task.moveRelative) {
+        angle = task.angle;
+        targetAngle = currentAngle + angle;
+    }
+    else {
+        targetAngle = task.angle;
+        angle = targetAngle - currentAngle;
+    }
+
+    if (angle != 0.0f && !isHoming_  && isHomed_ && !continuous_) {
+        if (targetAngle < minLimit_) {
+            LOG_WARN("Target angle %.2f deg is below minimum angle %.2f deg", targetAngle, minLimit_);
+            angle = std::max(0.0f, currentAngle - minLimit_);
         }
-        else if (angle_deg > maxLimit_) {
-            LOG_WARN("Angle %.2f deg is above maximum angle %.2f deg", angle_deg, maxLimit_);
-            angle_deg = maxLimit_;
+        else if (targetAngle > maxLimit_) {
+            LOG_WARN("Target angle %.2f deg is above maximum angle %.2f deg", targetAngle, maxLimit_);
+            angle = std::max(0.0f, maxLimit_ - currentAngle);
         }
     }
 
     Generic::Motor::MotorTask motorTask;
-    motorTask.revolutions = angleDegToRevolutions(angle_deg);
+    motorTask.revolutions = angleDegToRevolutions(angle);
     motorTask.velocity = angleDegToRevolutions(task.velocity);
     motorTask.acceleration = angleDegToRevolutions(task.acceleration);
     motorTask.deceleration = angleDegToRevolutions(task.deceleration);
-    motorTask.direction = task.direction;
     return motor_.run(motorTask);
 }
 
-void RotaryAxis::run(float targetVelocity, float acceleration, float deceleration, Direction direction) {
+void RotaryAxis::run(float targetVelocity, float acceleration, float deceleration) {
     RotaryAxisTask task;
     task.angle = 0.0f;
     task.velocity = targetVelocity;
     task.acceleration = acceleration;
     task.deceleration = deceleration;
-    task.direction = direction;
     run(task);
 }
 
-void RotaryAxis::run(float angle_deg, float targetVelocity, float acceleration, float deceleration, Direction direction) {
+void RotaryAxis::run(float angle_deg, float targetVelocity, float acceleration, float deceleration) {
     RotaryAxisTask task;
     task.angle = angle_deg;
     task.velocity = targetVelocity;
     task.acceleration = acceleration;
     task.deceleration = deceleration;
-    task.direction = direction;
     run(task);
 }
 

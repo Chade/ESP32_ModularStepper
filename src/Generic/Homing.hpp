@@ -47,11 +47,22 @@ public:
     explicit Homing(const Config& defaultConfig) : config_(defaultConfig) {};
     virtual ~Homing() = default;
 
-    void setConfig(const Config& config) { config_ = config; };
-    const Config& getConfig() const { return config_; };
-    Config& getConfig() { return config_; };
+    void setConfig(const Config& config) {
+        config_ = config;
+    };
 
-    State getState() const { return state_; };
+    const Config& getConfig() const {
+        return config_;
+    };
+
+    Config& getConfig() {
+        return config_;
+    };
+
+    State getState() const { 
+        return state_;
+    };
+
     bool isHoming() const {
         return compare_enums(state_, State::Running);
     };
@@ -86,8 +97,7 @@ protected:
     };
 
     static Direction searchDirectionFor(Axis::EndstopPosition pos) {
-        // Min (-1) -> Clockwise (-1), Max (+1) -> Counterclockwise (+1)
-        return (pos == Axis::EndstopPosition::Min) ? Direction::Clockwise : Direction::Counterclockwise;
+        return static_cast<Direction>(-cast_enum_to_base(pos));
     };
 
     void yieldMs(uint32_t delayMs) const;

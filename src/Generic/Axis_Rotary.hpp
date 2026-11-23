@@ -11,20 +11,20 @@ namespace Generic {
 class RotaryAxis : public Generic::Axis {
 public:
     RotaryAxis() = delete;
-    RotaryAxis(Generic::Motor& motor, float angleDegPerRevolution = 360.0f, bool continuous = true);
+    explicit RotaryAxis(Generic::Motor& motor, float angleDegPerRevolution = 360.0f, bool continuous = true);
     virtual ~RotaryAxis() = default;
 
     struct RotaryAxisTask {
-        float angle  = 0.0f;
-        float velocity = 0.0f;
-        float acceleration = 0.0f;
-        float deceleration = 0.0f;
-        Direction direction = Direction::Neutral;
+        float angle  = 0.0f;        // degrees (0 = velocity mode)
+        float velocity = 0.0f;      // degrees/s
+        float acceleration = 0.0f;  // degrees/s^2
+        float deceleration = 0.0f;  // degrees/s^2
+        bool moveRelative = true;   // true = relative angle, false = absolute position
     };
 
     bool run(const RotaryAxisTask& task);
-    void run(float targetVelocity, float acceleration, float deceleration, Direction direction) override;
-    void run(float angle_deg, float targetVelocity, float acceleration, float deceleration, Direction direction) override;
+    void run(float targetVelocity, float acceleration, float deceleration) override;
+    void run(float angle_deg, float targetVelocity, float acceleration, float deceleration) override;
 
     float getPosition() const override {
         return getAngleDeg();
@@ -56,10 +56,6 @@ public:
 
     bool isContinuous() const {
         return continuous_;
-    };
-
-    float getAngleDegPerRevolution() const {
-        return angleDegPerRevolution_;
     };
 
 private:

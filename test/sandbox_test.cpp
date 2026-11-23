@@ -15,6 +15,7 @@
 #include "Generic/Motor.hpp"
 #include "Generic/Axis.hpp"
 #include "Generic/Axis_Rotary.hpp"
+#include "Generic/Axis_Linear.hpp"
 #include "Generic/Homing.hpp"
 
 using UQ20x12 = UFixed<20,12>;
@@ -671,6 +672,105 @@ void testDualEndstopHoming() {
     printTestResult("Max endstop released after back-off", !endstopMax.isTriggered());
 }
 
+void testLinearAxis() {
+    std::cout << "\n=== Testing Linear Axis (mm) & Homing ===" << std::endl;
+
+    Stepper::Mock::Pin pinEnable(1);
+    Stepper::Mock::Pin pinStep(2);
+    Stepper::Mock::Pin pinDir(3);
+    // 200 steps/rev, 1 microstep, 8.0 mm/rev leadscrew -> 25 steps/mm
+    Stepper::Mock::Driver driver(pinEnable, pinStep, pinDir, 1);
+    Stepper::Generic::Generator generator(driver);
+    Stepper::Generic::Motor motor(generator, 200, 1.0f);
+    Stepper::Generic::LinearAxis axis(motor, 8.0f, 0.0f, 200.0f);
+
+    printTestResult("LinearAxis distanceMmPerRevolution == 8.0", axis.getDistanceMmPerRevolution() == 8.0f);
+    printTestResult("LinearAxis min limit == 0.0 mm", axis.getMinPositionMm() == 0.0f);
+    printTestResult("LinearAxis max limit == 200.0 mm", axis.getMaxPositionMm() == 200.0f);
+
+    // Move 40 mm forward (1000 steps)
+    axis.setPositionMm(10.0f);
+    printTestResult("LinearAxis setPositionMm / getPositionMm", std::abs(axis.getPositionMm() - 10.0f) < 0.01f);
+
+    axis.run(40.0f, 80.0f, 200.0f, 200.0f, Stepper::Direction::Forward);
+    uint32_t steps = 0;
+    while (axis.getState() != Stepper::State::Stopped && steps < 2000) {
+        generator.advanceStateAfterStep(1);
+        steps++;
+    }
+    printTestResult("LinearAxis 40 mm move executes 1000 steps", steps == 1000);
+    printTestResult("LinearAxis position after 40 mm forward == 50.0 mm", std::abs(axis.getPositionMm() - 50.0f) < 0.01f);
+
+    // Soft limit clamping: try moving 200 mm forward from 50 mm (should clamp to 150 mm -> 200 mm max)
+    axis.run(200.0f, 80.0f, 200.0f, 200.0f, Stepper::Direction::Forward);
+    printTestResult("LinearAxis clamps move exceeding maxLimit (150 mm = 3750 steps)", generator.getState().stepsTotal == 3750);
+    axis.stop();
+
+    // Limit protection with Forward / Backward
+    Stepper::Mock::Pin pinMin(10);
+    Stepper::Mock::Pin pinMax(11);
+    Stepper::Mock::Endstop endstopMin(pinMin);
+    Stepper::Mock::Endstop endstopMax(pinMax);
+    axis.setEndstops(&endstopMin, &endstopMax);
+
+    endstopMin.simulateTrigger(true);
+    printTestResult("LinearAxis blocks Backward into triggered Min", !axis.isDirectionAllowed(Stepper::Direction::Backward));
+    printTestResult("LinearAxis allows Forward away from triggered Min", axis.isDirectionAllowed(Stepper::Direction::Forward));
+    endstopMin.simulateTrigger(false);
+
+    // Dual-endstop homing works identically on LinearAxis
+    Stepper::Generic::Homing homing;
+    Stepper::Generic::Homing::Config cfg;
+    cfg.strategy = Stepper::Generic::Homing::Strategy::MinThenMax;
+    cfg.fastVelocity = 40.0f;
+    cfg.slowVelocity = 8.0f;
+    cfg.acceleration = 200.0f;
+    cfg.deceleration = 200.0f;
+    cfg.retractDistance = 4.0f;
+    cfg.backoffDistance = 2.0f;
+    cfg.maxTravelDistance = 300.0f;
+    cfg.homePosition = 0.0f;
+
+    int slowLatches = 0;
+    int yields = 0;
+    homing.setYieldFunction([&](uint32_t) {
+        yields++;
+        auto state = homing.getState();
+        bool homingMax = (slowLatches >= 1);
+        auto& active = homingMax ? endstopMax : endstopMin;
+        if (state == Stepper::Generic::Homing::State::FastApproach) {
+            if (homingMax && axis.getState() != Stepper::State::Stopped) {
+                generator.advanceStateAfterStep(2500); // 100.0 mm
+                active.simulateTrigger(true);
+            } else if (!homingMax && yields >= 2) {
+                active.simulateTrigger(true);
+            }
+        } else if (state == Stepper::Generic::Homing::State::Retracting) {
+            if (axis.getState() != Stepper::State::Stopped) {
+                active.simulateTrigger(false);
+                axis.stop();
+            }
+        } else if (state == Stepper::Generic::Homing::State::SlowApproach) {
+            if (axis.getState() != Stepper::State::Stopped) {
+                active.simulateTrigger(true);
+                slowLatches++;
+            }
+        } else if (state == Stepper::Generic::Homing::State::BackingOff) {
+            if (axis.getState() != Stepper::State::Stopped) {
+                uint32_t total = static_cast<uint32_t>(generator.getState().stepsTotal);
+                if (total > 0) generator.advanceStateAfterStep(total);
+                active.simulateTrigger(false);
+                axis.stop();
+            }
+        }
+    });
+
+    bool homed = homing.homeMinMax(axis, cfg);
+    printTestResult("LinearAxis MinThenMax homing succeeds", homed);
+    printTestResult("LinearAxis calibrated max limit == 100.0 mm", std::abs(axis.getMaxPositionMm() - 100.0f) < 0.01f);
+    printTestResult("LinearAxis backed off to 98.0 mm", std::abs(axis.getPositionMm() - 98.0f) < 0.01f);
+}
+
 int main() {
     std::cout << "==========================================" << std::endl;
     std::cout << "   ESP32 Modular Stepper Pure C++ Sandbox  " << std::endl;
@@ -680,6 +780,7 @@ int main() {
     testRotaryAxisHoming();
     testStepCountExactness();
     testDualEndstopHoming();
+    testLinearAxis();
     //testEnumHelpers();
     //testStepperGenerator();
     testStepperGeneratorZeroAcc();

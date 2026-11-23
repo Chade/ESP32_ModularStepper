@@ -13,8 +13,7 @@ namespace Generic {
     class Driver {
     public:
         Driver() = delete;
-        Driver(Generic::Pin& enablePin, Generic::Pin& stepPin, Generic::Pin& directionPin, uint8_t microsteps = 1);
-
+        explicit Driver(Generic::Pin& enablePin, Generic::Pin& stepPin, Generic::Pin& directionPin, uint8_t microsteps = 1);
         virtual ~Driver() = default;
 
         virtual void init() = 0;

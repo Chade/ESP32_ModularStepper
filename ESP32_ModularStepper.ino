@@ -30,9 +30,8 @@ Stepper::ESP32::MCPWM::Driver driver(pinEnable, pinStep, pinDirection, 16);
 Stepper::Generic::Generator generator(driver);
 Stepper::Generic::Motor motor(generator, 200, 1.0f);
 Stepper::Generic::RotaryAxis axis(motor, 360.0f, false);
+Stepper::Generic::RotaryAxis::RotaryAxisTask task;
 Stepper::ESP32::Homing homing;
-
-Stepper::Generic::Motor::MotorTask task;
 
 void setup() {
   // put your setup code here, to run once:
@@ -43,61 +42,22 @@ void setup() {
 
   while (!Serial) { vTaskDelay(pdMS_TO_TICKS(1000)); }
 
-/*
-  encoder.setup();
-  encoder.initMappedPosition(0); // reset init value
-
-  // lambda, register callback when mappedPosition value changed
-  encoder.registerEncoderChangedCb([](long mappedPosition) {
-      Serial.print("Encoder1: ");
-      Serial.println(mappedPosition);
-  });
-
-  encoder.getButton()->attachClick([]() {
-      Serial.println("Encoder1: click");
-  });
-*/
-
-  task.velocity = 1.0;
-  task.revolutions = 90.0f;
-  task.acceleration = 100.0f;
-  task.deceleration = 100.0f;
-  task.direction = Stepper::Direction::Clockwise;
-
-  rotaryEncoder.setEncoderType( EncoderType::HAS_PULLUP );
-	rotaryEncoder.setBoundaries(0, 1'000'000, false);
-  rotaryEncoder.setStepValue(1);
-  rotaryEncoder.setEncoderValue(task.revolutions);
-  // rotaryEncoder.setEncoderValue(task.velocity.getInteger());
-
-  rotaryEncoder.onTurned([](long value) {
-    // Serial.print("Steps: ");
-    // Serial.println(value);
-    // task.steps = value;
-
-    Serial.print("Angle: ");
-    Serial.println(value);
-    task.revolutions = value;
-  });
-
-  rotaryEncoder.onPressed([](unsigned long duration) {
-    Serial.println("Run task");
-    if (duration > 500) {
-      Serial.println("Change direction");
-      if (task.direction == Stepper::Direction::Clockwise)
-        task.direction = Stepper::Direction::Counterclockwise;
-      else
-        task.direction = Stepper::Direction::Clockwise;
-    }
-    motor.run(task);
-  });
-  rotaryEncoder.begin();
-  driver.enable();
-
   // Configure endstop debounce (5 ms) and attach to rotary axis
   endstopMin.setDebounceUs(5000);
   endstopMax.setDebounceUs(5000);
   axis.setEndstops(&endstopMin, &endstopMax);
+
+  task.angle = 90.0f;
+  task.velocity = 1.0;
+  task.acceleration = 100.0f;
+  task.deceleration = 100.0f;
+  task.moveRelative = true;
+
+  rotaryEncoder.setEncoderType( EncoderType::HAS_PULLUP );
+	rotaryEncoder.setBoundaries(0, 360, false);
+  rotaryEncoder.setStepValue(1);
+  rotaryEncoder.setEncoderValue(task.angle);
+  // rotaryEncoder.setEncoderValue(task.velocity);
 
   // Initialize dual-endstop homing (Min -> Max) with very slow speeds for safe testing
   Stepper::Generic::Homing::Config homingCfg;
@@ -112,13 +72,28 @@ void setup() {
   homingCfg.homePosition = 0.0f;
   homing.setConfig(homingCfg);
 
-  homing.homeMinMaxAsync(axis, [](bool success) {
-    Serial.printf("Dual-endstop homing finished: %s | Limits: [%.2f, %.2f] deg | Angle: %.2f deg\n",
+  rotaryEncoder.onTurned([](long value) {
+    Serial.print("Angle: ");
+    Serial.println(value);
+    task.angle = value;
+  });
+
+  rotaryEncoder.onPressed([](unsigned long duration) {
+    Serial.println("Run task");
+    if (duration > 500) {
+      homing.homeMinMaxAsync(axis, [](bool success) {
+      Serial.printf("Dual-endstop homing finished: %s | Limits: [%.2f, %.2f] deg | Angle: %.2f deg\n",
                   success ? "SUCCESS" : "FAILED",
                   axis.getMinAngleDeg(),
                   axis.getMaxAngleDeg(),
                   axis.getAngleDeg());
+      });
+    }
+    axis.run(task);
   });
+
+  rotaryEncoder.begin();
+  driver.enable();
 }
 
 void loop() {

@@ -16,7 +16,7 @@ namespace Generic {
     {
     public:
         Generator() = delete;
-        Generator(Driver& driver);
+        explicit Generator(Driver& driver);
         virtual ~Generator();
 
         struct GeneratorTask {
@@ -122,11 +122,11 @@ namespace Generic {
             state_.positionSteps = steps;
         };
 
-        Driver& getDriver() {
+        Driver& driver() {
             return driver_;
         };
 
-        const Driver& getDriver() const {
+        const Driver& driver() const {
             return driver_;
         };
 
