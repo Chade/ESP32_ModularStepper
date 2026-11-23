@@ -1,3 +1,5 @@
+#include <driver/gpio.h>
+
 #include "Pin.hpp"
 
 namespace Stepper {

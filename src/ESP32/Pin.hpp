@@ -1,8 +1,6 @@
 #ifndef STEPPER_PIN_ESP32_HPP
 #define STEPPER_PIN_ESP32_HPP
 
-#include <driver/gpio.h>
-
 #include "../Generic/Pin.hpp"
 
 namespace Stepper {

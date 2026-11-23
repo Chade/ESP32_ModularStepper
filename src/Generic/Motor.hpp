@@ -3,8 +3,8 @@
 
 #include <cmath>
 
-#include "Helper.hpp"
 #include "Generator.hpp"
+#include "Helper.hpp"
 
 namespace Stepper {
 namespace Generic {

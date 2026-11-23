@@ -4,9 +4,8 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
-#include "../Generic/Helper.hpp"
 #include "../Generic/Driver.hpp"
-#include "Pin.hpp"
+#include "../Generic/Helper.hpp"
 
 namespace Stepper {
 namespace ESP32 {

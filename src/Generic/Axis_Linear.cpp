@@ -1,5 +1,5 @@
-#include <cassert>
 #include <algorithm>
+#include <cassert>
 
 #include "Axis_Linear.hpp"
 #include "Log.hpp"

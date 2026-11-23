@@ -2,10 +2,9 @@
 #define STEPPER_HOMING_HPP
 
 #include <cstdint>
-#include <functional>
 
-#include "Helper.hpp"
 #include "Axis.hpp"
+#include "Helper.hpp"
 
 namespace Stepper {
 namespace Generic {

@@ -1,5 +1,5 @@
-#include "Motor.hpp"
 #include "Log.hpp"
+#include "Motor.hpp"
 
 namespace Stepper {
 namespace Generic {

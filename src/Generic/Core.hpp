@@ -3,7 +3,6 @@
 
 #include "Event.hpp"
 #include "Task.hpp"
-#include <deque>
 
 namespace Stepper
 {

@@ -1,9 +1,9 @@
 #ifndef STEPPER_HELPER_HPP
 #define STEPPER_HELPER_HPP
 
+#include <cstdint>
 #include <FixedPoints.h>
 #include <type_traits>
-#include <cstdint>
 
 using UQ20x12 = UFixed<20, 12>;
 

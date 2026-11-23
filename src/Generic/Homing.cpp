@@ -1,14 +1,6 @@
 #include "Homing.hpp"
 #include "Log.hpp"
 
-#if defined(ARDUINO) || defined(ESP32)
-#include <freertos/FreeRTOS.h>
-#include <freertos/task.h>
-#else
-#include <chrono>
-#include <thread>
-#endif
-
 namespace Stepper {
 namespace Generic {
 
@@ -56,7 +48,7 @@ bool Homing::homeToEndstop(Axis& axis, Axis::EndstopPosition endstopPos, const C
 
     // Step 3: Slow Approach (bounded by retractDistance * 1.5f)
     state_ = State::SlowApproach;
-    if (!approachEndstop(axis, endstopPos, config.slowVelocity, config.acceleration, config.deceleration, config.retractDistance * 1.5f)) {
+    if (!approachEndstop(axis, endstopPos, config.slowVelocity, config.acceleration, config.deceleration, config.retractDistance * 2.0f)) {
         return false;
     }
 
@@ -78,14 +70,16 @@ bool Homing::approachEndstop(Axis& axis, Axis::EndstopPosition endstopPos, float
     Direction direction = searchDirectionFor(endstopPos);
     float signedVelocity = fabs(velocity) * sign(direction);
     if (distance > 0.0f) {
+        LOG_INFO("Approaching endstop %s with velocity %.2f, cutoff distance: %.2f", (endstopPos == Axis::EndstopPosition::Min ? "MIN" : "MAX"), signedVelocity, distance);
         axis.run(distance, signedVelocity, acceleration, deceleration);
     } else {
+        LOG_INFO("Approaching endstop %s with velocity %.2f", (endstopPos == Axis::EndstopPosition::Min ? "MIN" : "MAX"), signedVelocity);
         axis.run(signedVelocity, acceleration, deceleration);
     }
     axis.waitForState(Stepper::State::Stopped);
 
     if (!targetEndstop->isTriggered()) {
-        LOG_ERROR("Endstop approach exceeded max travel distance (%.2f)!", distance);
+        LOG_ERROR("Endstop after approach not triggered!", distance);
         return false;
     }
     return true;
@@ -110,11 +104,12 @@ bool Homing::backoffFromEndstop(Axis& axis, Axis::EndstopPosition endstopPos, fl
 
     Direction direction = reverseDirection(searchDirectionFor(endstopPos));
     float signedVelocity = fabs(velocity) * sign(direction);
+    LOG_INFO("Backing off from endstop %s with velocity %.2f, distance: %.2f", (endstopPos == Axis::EndstopPosition::Min ? "MIN" : "MAX"), signedVelocity, distance);
     axis.run(distance, signedVelocity, acceleration, dceleration);
     axis.waitForState(Stepper::State::Stopped);
 
     if (targetEndstop->isTriggered()) {
-        LOG_ERROR("Endstop still triggered after backing off (%.2f)!", distance);
+        LOG_ERROR("Endstop still triggered after backing off!");
         return false;
     }
 

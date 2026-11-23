@@ -2,7 +2,6 @@
 #define STEPPER_GENERATOR_ESP32_HPP
 
 #include <freertos/FreeRTOS.h>
-#include <freertos/task.h>
 #include <freertos/event_groups.h>
 
 #include "../Generic/Generator.hpp"

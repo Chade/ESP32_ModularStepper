@@ -4,10 +4,8 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/queue.h>
-#include <driver/gpio.h>
 
 #include "../Generic/Endstop.hpp"
-#include "Pin.hpp"
 
 namespace Stepper {
 namespace ESP32 {

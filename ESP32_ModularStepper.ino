@@ -43,9 +43,9 @@ void setup() {
 
   while (!Serial) { vTaskDelay(pdMS_TO_TICKS(1000)); }
 
-  // Configure endstop debounce (5 ms) and attach to rotary axis
-  endstopMin.setDebounceUs(10000);
-  endstopMax.setDebounceUs(10000);
+  // Configure endstop debounce (25 ms) and attach to rotary axis
+  endstopMin.setDebounceUs(25000);
+  endstopMax.setDebounceUs(25000);
   axis.setEndstops(&endstopMin, &endstopMax);
 
   //task.revolutions = 0.0f;

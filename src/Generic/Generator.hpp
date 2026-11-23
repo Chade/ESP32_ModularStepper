@@ -1,11 +1,11 @@
 #ifndef STEPPER_GENERATOR_HPP
 #define STEPPER_GENERATOR_HPP
 
-#include <stdint.h>
 #include <FixedPoints.h>
+#include <stdint.h>
 
-#include "Helper.hpp"
 #include "Driver.hpp"
+#include "Helper.hpp"
 
 using UQ20x12 = UFixed<20, 12>;
 

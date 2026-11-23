@@ -1,8 +1,6 @@
 #ifndef STEPPER_AXIS_LINEAR_HPP
 #define STEPPER_AXIS_LINEAR_HPP
 
-#include <cassert>
-
 #include "Axis.hpp"
 #include "Motor.hpp"
 

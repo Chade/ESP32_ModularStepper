@@ -1,3 +1,4 @@
+#include <driver/gpio.h>
 #include <esp_timer.h>
 
 #include "Endstop.hpp"
