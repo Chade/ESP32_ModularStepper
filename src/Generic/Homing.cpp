@@ -4,8 +4,8 @@
 namespace Stepper {
 namespace Generic {
 
-Homing::Homing(const Config& defaultConfig)
-        : config_(defaultConfig) {
+Homing::Homing(const Config& config)
+        : config_(config) {
 
 };
 

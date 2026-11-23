@@ -4,16 +4,16 @@
 namespace Stepper {
 namespace ESP32 {
 
-Homing::Homing()
-    : Generic::Homing() {
+Homing::Homing() {
     homingSemaphoreHandle_ = xSemaphoreCreateBinary();
     if (homingSemaphoreHandle_ != nullptr) {
         xSemaphoreGive(homingSemaphoreHandle_);
     }
 }
 
-Homing::Homing(const Config& defaultConfig)
-    : Generic::Homing(defaultConfig) {
+
+Homing::Homing(const Config& config)
+        : Generic::Homing(config) {
     homingSemaphoreHandle_ = xSemaphoreCreateBinary();
     if (homingSemaphoreHandle_ != nullptr) {
         xSemaphoreGive(homingSemaphoreHandle_);
@@ -59,13 +59,13 @@ bool Homing::homeAsync(Generic::Axis& axis, const Config& config, HomingCallback
     }
 
     BaseType_t res = xTaskCreatePinnedToCore(
-        Homing::homingTask,
-        "AxisHoming",
-        4096,
-        this,
-        configMAX_PRIORITIES - 3,
-        &homingTaskHandle_,
-        1 // Run on core 1
+        Homing::homingTask,       /* Task function */
+        "HomingTask",             /* Task name (max. 16 characters by default) */
+        4096,                     /* Stack size in bytes */
+        this,                     /* Parameter passed as input of the task */
+        configMAX_PRIORITIES - 3, /* Task priority */
+        &homingTaskHandle_,       /* Task handle */
+        1                         /* CPU core to use */
     );
 
     if (res != pdPASS) {

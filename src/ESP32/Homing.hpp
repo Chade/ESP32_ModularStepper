@@ -16,7 +16,7 @@ public:
     using HomingCallback = std::function<void(bool success)>;
 
     Homing();
-    explicit Homing(const Config& defaultConfig);
+    explicit Homing(const Config& config);
     ~Homing() override;
 
     // Asynchronous non-blocking homing routines executed in a background FreeRTOS task
