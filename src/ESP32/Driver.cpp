@@ -33,7 +33,7 @@ namespace ESP32 {
         }
     }
 
-    void IRAM_ATTR Driver::task(void* args) {
+    void Driver::driverTask(void* args) {
         Driver* self = static_cast<Driver*>(args);
 
         for(;;) {

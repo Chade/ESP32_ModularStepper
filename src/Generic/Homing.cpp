@@ -4,6 +4,11 @@
 namespace Stepper {
 namespace Generic {
 
+Homing::Homing(const Config& defaultConfig)
+        : config_(defaultConfig) {
+
+};
+
 void Homing::restoreLimitProtection(Axis& axis, Axis::EndstopPosition pos) {
     if (pos == Axis::EndstopPosition::Min && axis.isLimitProtectionMinEnabled()) {
         axis.enableLimitProtectionMin(true);

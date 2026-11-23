@@ -5,7 +5,7 @@ namespace Stepper {
 namespace Generic {
 
 Axis::Axis(Generic::Motor& motor)
-    : motor_(motor) {
+        : motor_(motor) {
 }
 
 void Axis::setEndstopMin(Generic::Endstop* endstop, bool enableLimitProtection) {

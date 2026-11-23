@@ -4,37 +4,37 @@
 #include "Event.hpp"
 #include "Task.hpp"
 
-namespace Stepper
-{
-    class Core
-    {
-    public:
-        Core();
-        ~Core();
+namespace Stepper {
 
-        void start();
-        void stop();
+class Core {
+public:
+    Core();
+    ~Core();
 
-        bool hasActiveTask();
+    void start();
+    void stop();
 
-    protected:
-        const int32_t taskQueueSize = 10;
-        const int32_t taskEventLoopQueueSize = 10;
-        const int32_t stopEventLoopQueueSize = 10;
-        const int32_t taskRunnerStopTimeout_us = 5000000;
+    bool hasActiveTask();
 
-        static void taskRunner(void *args);
-        static void taskEventCallback(void *eventArgs, esp_event_base_t eventBase, int32_t eventId, void *eventData);
-        static void stopEventCallback(void *eventArgs, esp_event_base_t eventBase, int32_t eventId, void *eventData);
+protected:
+    const int32_t taskQueueSize = 10;
+    const int32_t taskEventLoopQueueSize = 10;
+    const int32_t stopEventLoopQueueSize = 10;
+    const int32_t taskRunnerStopTimeout_us = 5000000;
 
-        TaskHandle_t m_taskHandle{nullptr};
-        QueueHandle_t m_taskQueueHandle{nullptr};
+    static void taskRunner(void *args);
+    static void taskEventCallback(void *eventArgs, esp_event_base_t eventBase, int32_t eventId, void *eventData);
+    static void stopEventCallback(void *eventArgs, esp_event_base_t eventBase, int32_t eventId, void *eventData);
 
-        CoreTask m_activeTask;
-        bool m_taskRunnerStop{false};
+    TaskHandle_t m_taskHandle{nullptr};
+    QueueHandle_t m_taskQueueHandle{nullptr};
 
-        static constexpr const char* log_tag = "Core";
-    };
-}
+    CoreTask m_activeTask;
+    bool m_taskRunnerStop{false};
+
+    static constexpr const char* log_tag = "Core";
+};
+
+} // namespace Stepper
 
 #endif // STEPPER_CORE_HPP

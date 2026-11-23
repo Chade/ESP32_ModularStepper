@@ -8,7 +8,7 @@ namespace Stepper {
 namespace Generic {
 
 LinearAxis::LinearAxis(Generic::Motor& motor, float distanceMmPerRevolution)
-    : Generic::Axis(motor), distanceMmPerRevolution_(distanceMmPerRevolution) {
+        : Generic::Axis(motor), distanceMmPerRevolution_(distanceMmPerRevolution) {
     assert(distanceMmPerRevolution_ > 0.0f);
 }
 

@@ -7,7 +7,7 @@ namespace Stepper {
 namespace Generic {
 
 RotaryAxis::RotaryAxis(Generic::Motor& motor, float angleDegPerRevolution, bool continuous)
-    : Generic::Axis(motor), angleDegPerRevolution_(angleDegPerRevolution), continuous_(continuous) {
+        : Generic::Axis(motor), angleDegPerRevolution_(angleDegPerRevolution), continuous_(continuous) {
     assert(angleDegPerRevolution_ > 0);
     setLimits(0.0f, 360.0f);
 }

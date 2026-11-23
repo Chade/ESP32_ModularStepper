@@ -6,25 +6,24 @@ namespace ESP32 {
 
 Homing::Homing()
     : Generic::Homing() {
-    homingDoneSem_ = xSemaphoreCreateBinary();
-    if (homingDoneSem_ != nullptr) {
-        xSemaphoreGive(homingDoneSem_);
+    homingSemaphoreHandle_ = xSemaphoreCreateBinary();
+    if (homingSemaphoreHandle_ != nullptr) {
+        xSemaphoreGive(homingSemaphoreHandle_);
     }
 }
 
 Homing::Homing(const Config& defaultConfig)
     : Generic::Homing(defaultConfig) {
-    homingDoneSem_ = xSemaphoreCreateBinary();
-    if (homingDoneSem_ != nullptr) {
-        xSemaphoreGive(homingDoneSem_);
+    homingSemaphoreHandle_ = xSemaphoreCreateBinary();
+    if (homingSemaphoreHandle_ != nullptr) {
+        xSemaphoreGive(homingSemaphoreHandle_);
     }
 }
 
 Homing::~Homing() {
     abortHoming();
-    if (homingDoneSem_ != nullptr) {
-        vSemaphoreDelete(homingDoneSem_);
-        homingDoneSem_ = nullptr;
+    if (homingSemaphoreHandle_ != nullptr) {
+        vSemaphoreDelete(homingSemaphoreHandle_);
     }
 }
 
@@ -55,8 +54,8 @@ bool Homing::homeAsync(Generic::Axis& axis, const Config& config, HomingCallback
     lastResult_ = false;
 
     // Reset completion semaphore before starting
-    if (homingDoneSem_ != nullptr) {
-        xSemaphoreTake(homingDoneSem_, 0);
+    if (homingSemaphoreHandle_ != nullptr) {
+        xSemaphoreTake(homingSemaphoreHandle_, 0);
     }
 
     BaseType_t res = xTaskCreatePinnedToCore(
@@ -72,8 +71,8 @@ bool Homing::homeAsync(Generic::Axis& axis, const Config& config, HomingCallback
     if (res != pdPASS) {
         LOG_ERROR("Failed to create FreeRTOS homing task");
         activeAxis_ = nullptr;
-        if (homingDoneSem_ != nullptr) {
-            xSemaphoreGive(homingDoneSem_);
+        if (homingSemaphoreHandle_ != nullptr) {
+            xSemaphoreGive(homingSemaphoreHandle_);
         }
         return false;
     }
@@ -116,13 +115,13 @@ bool Homing::waitForHoming(uint32_t timeoutMs) {
         return lastResult_;
     }
 
-    if (homingDoneSem_ == nullptr) {
+    if (homingSemaphoreHandle_ == nullptr) {
         return false;
     }
 
-    TickType_t ticks = (timeoutMs == portMAX_DELAY) ? portMAX_DELAY : pdMS_TO_TICKS(timeoutMs);
-    if (xSemaphoreTake(homingDoneSem_, ticks) == pdTRUE) {
-        xSemaphoreGive(homingDoneSem_);
+    TickType_t ticks = (timeoutMs == UINT32_MAX) ? portMAX_DELAY : pdMS_TO_TICKS(timeoutMs);
+    if (xSemaphoreTake(homingSemaphoreHandle_, ticks) == pdTRUE) {
+        xSemaphoreGive(homingSemaphoreHandle_);
         return lastResult_;
     }
 
@@ -169,8 +168,8 @@ void Homing::abortHoming() {
             cb(false);
         }
 
-        if (homingDoneSem_ != nullptr) {
-            xSemaphoreGive(homingDoneSem_);
+        if (homingSemaphoreHandle_ != nullptr) {
+            xSemaphoreGive(homingSemaphoreHandle_);
         }
     }
 }
@@ -192,8 +191,8 @@ void Homing::homingTask(void* args) {
         cb(success);
     }
 
-    if (self->homingDoneSem_ != nullptr) {
-        xSemaphoreGive(self->homingDoneSem_);
+    if (self->homingSemaphoreHandle_ != nullptr) {
+        xSemaphoreGive(self->homingSemaphoreHandle_);
     }
 
     self->homingTaskHandle_ = nullptr;

@@ -8,8 +8,8 @@ namespace ESP32 {
     class Pin : public Generic::Pin {
     public:
         Pin() = delete;
-        Pin(int8_t pin, IoMode mode = IoMode::Input_Output, PullMode pullMode = PullMode::Floating);
-        Pin(uint8_t pin, bool inverse, IoMode mode = IoMode::Input_Output, PullMode pullMode = PullMode::Floating);
+        explicitPin(int8_t pin, IoMode mode = IoMode::Input_Output, PullMode pullMode = PullMode::Floating);
+        explicit Pin(uint8_t pin, bool inverse, IoMode mode = IoMode::Input_Output, PullMode pullMode = PullMode::Floating);
 
         void setIoMode(IoMode mode) override;
         void setPullMode(PullMode pullMode) override;

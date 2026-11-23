@@ -41,7 +41,7 @@ public:
         float homePosition = 0.0f;        // coordinate assigned at the first latched endstop
     };
 
-    Homing() = default;
+    Homing() = delete;
     explicit Homing(const Config& defaultConfig) : config_(defaultConfig) {};
     virtual ~Homing() = default;
 

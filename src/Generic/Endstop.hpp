@@ -27,7 +27,7 @@ public:
     using VoidCallback = std::function<void()>;
 
     Endstop() = delete;
-    Endstop(Pin& pin)
+    explicit Endstop(Pin& pin)
             : pin_(pin) {
         assert(pin_.getIoMode() == Pin::IoMode::Input || pin_.getIoMode() == Pin::IoMode::Input_Output);
     }

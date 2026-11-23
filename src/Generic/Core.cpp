@@ -1,124 +1,107 @@
 #include "Core.hpp"
 #include "Log.hpp"
 
-namespace Stepper
-{
-    Core::Core()
-    {
-        LOG_INFO("Create task queue");
-        m_taskQueueHandle = xQueueCreate(taskQueueSize, sizeof(struct Task));
-        assert(m_taskQueueHandle != 0);
+namespace Stepper {
 
-        LOG_INFO("Create task event loop");
-        ESP_ERROR_CHECK(taskEventLoopCreate(taskEventLoopQueueSize, 2));
+Core::Core() {
+    LOG_INFO("Create task queue");
+    m_taskQueueHandle = xQueueCreate(taskQueueSize, sizeof(struct Task));
+    assert(m_taskQueueHandle != 0);
 
-        LOG_INFO("Create stop event loop");
-        ESP_ERROR_CHECK(stopEventLoopCreate(stopEventLoopQueueSize, 2));
+    LOG_INFO("Create task event loop");
+    ESP_ERROR_CHECK(taskEventLoopCreate(taskEventLoopQueueSize, 2));
+
+    LOG_INFO("Create stop event loop");
+    ESP_ERROR_CHECK(stopEventLoopCreate(stopEventLoopQueueSize, 2));
+}
+
+Core::~Core() {
+    stop();
+    ESP_ERROR_CHECK(taskEventLoopDelete());
+    ESP_ERROR_CHECK(stopEventLoopDelete());
+}
+
+void Core::start() {
+    LOG_INFO("Register to task event");
+    ESP_ERROR_CHECK(taskEventLoopHandlerRegister(TaskEventId::ANY_EVENT, taskEventCallback, this));
+
+    LOG_INFO("Register to stop event");
+    ESP_ERROR_CHECK(stopEventLoopHandlerRegister(StopEventId::ANY_EVENT, stopEventCallback, this));
+
+    if (m_taskHandle == nullptr) {
+        LOG_INFO("Create task runner");
+        // disableCore1WDT(); // Should not be necessary, as we should not add too much load to one core
+        xTaskCreatePinnedToCore(
+            Core::taskRunner,            /* Task function */
+            "CoreTask",                  /* Task name (max. 16 characters by default) */
+            3072,                        /* Stack size in bytes */
+            this,                        /* Parameter passed as input of the task */
+            1,                           /* Task priority */
+            &m_taskHandle,               /* Task handle */
+            1                            /* CPU core to use */
+        );
     }
-
-    Core::~Core()
-    {
-        stop();
-        ESP_ERROR_CHECK(taskEventLoopDelete());
-        ESP_ERROR_CHECK(stopEventLoopDelete());
+    else {
+        LOG_ERROR("Task runner already created!");
     }
+}
 
-    void Core::start()
-    {
-        LOG_INFO("Register to task event");
-        ESP_ERROR_CHECK(taskEventLoopHandlerRegister(TaskEventId::ANY_EVENT, taskEventCallback, this));
+void Core::stop() {
+    LOG_INFO("Unregister from task event");
+    ESP_ERROR_CHECK(taskEventLoopHandlerUnregister(TaskEventId::ANY_EVENT, taskEventCallback));
 
-        LOG_INFO("Register to stop event");
-        ESP_ERROR_CHECK(stopEventLoopHandlerRegister(StopEventId::ANY_EVENT, stopEventCallback, this));
+    LOG_INFO("Unregister from stop event");
+    ESP_ERROR_CHECK(stopEventLoopHandlerUnregister(StopEventId::ANY_EVENT, stopEventCallback));
 
-        if (m_taskHandle == nullptr)
-        {
-            LOG_INFO("Create task runner");
-            // disableCore1WDT(); // Should not be necessary, as we should not add too much load to one core
-            xTaskCreatePinnedToCore(
-                Core::taskRunner,            /* Task function */
-                "CoreTask",                  /* Task name (max. 16 characters by default) */
-                3072,                        /* Stack size in bytes */
-                this,                        /* Parameter passed as input of the task */
-                1,                           /* Task priority */
-                &m_taskHandle,               /* Task handle */
-                1                            /* CPU core to use */
-            );
+    // Signal task runnner to stop
+    m_taskRunnerStop = true;
+
+    // Wait for taskrunner to finish
+    int64_t startTime = esp_timer_get_time();
+    while (m_taskHandle != nullptr) {
+        int64_t timeElapsed = esp_timer_get_time() - startTime;
+        if (timeElapsed < taskRunnerStopTimeout_us) {
+            LOG_INFO("Waiting for task runner to stop");
+            vTaskDelay(pdMS_TO_TICKS(500));
         }
-        else
-        {
-            LOG_ERROR("Task runner already created!");
-        }
-    }
-
-    void Core::stop()
-    {
-        LOG_INFO("Unregister from task event");
-        ESP_ERROR_CHECK(taskEventLoopHandlerUnregister(TaskEventId::ANY_EVENT, taskEventCallback));
-
-        LOG_INFO("Unregister from stop event");
-        ESP_ERROR_CHECK(stopEventLoopHandlerUnregister(StopEventId::ANY_EVENT, stopEventCallback));
-
-        // Signal task runnner to stop
-        m_taskRunnerStop = true;
-
-        // Wait for taskrunner to finish
-        int64_t startTime = esp_timer_get_time();
-        while (m_taskHandle != nullptr)
-        {
-            int64_t timeElapsed = esp_timer_get_time() - startTime;
-            if (timeElapsed < taskRunnerStopTimeout_us)
-            {
-                LOG_INFO("Waiting for task runner to stop");
-                vTaskDelay(pdMS_TO_TICKS(500));
-            }
-            else
-            {
-                LOG_INFO("Force task runner to stop");
-                vTaskDelete(m_taskHandle);
-                m_taskHandle = nullptr;
-            }
+        else {
+            LOG_INFO("Force task runner to stop");
+            vTaskDelete(m_taskHandle);
+            m_taskHandle = nullptr;
         }
     }
+}
 
-    bool Core::hasActiveTask()
-    {
-        return m_activeTask.getState() != Task::TaskState::UNDEFINED;
-    }
+bool Core::hasActiveTask() {
+    return m_activeTask.getState() != Task::TaskState::UNDEFINED;
+}
 
-    void Core::taskRunner(void *args)
-    {
-        Core *core = static_cast<Core *>(args);
-        Task task;
+void Core::taskRunner(void *args) {
+    Core *core = static_cast<Core *>(args);
+    Task task;
 
-        while (!core->m_taskRunnerStop)
-        {
+    while (!core->m_taskRunnerStop) {
 
-            if (core->hasActiveTask())
-            {
-                //
-            }
-            else
-            {
-                if (xQueueReceive(core->m_taskQueueHandle, &task, pdMS_TO_TICKS(1000)) == pdTRUE)
-                {
-                    core->m_activeTask = task;
-                    core->m_activeTask.setState(Task::TaskState::ACTIVE);
-                }
+        if (core->hasActiveTask()) {
+            //
+        }
+        else {
+            if (xQueueReceive(core->m_taskQueueHandle, &task, pdMS_TO_TICKS(1000)) == pdTRUE) {
+                core->m_activeTask = task;
+                core->m_activeTask.setState(Task::TaskState::ACTIVE);
             }
         }
-
-        LOG_ERROR("Task runner aborted!");
-        vTaskDelete(nullptr);
-        core->m_taskHandle = nullptr;
     }
 
-    void Core::taskEventCallback(void *eventArgs, esp_event_base_t eventBase, int32_t eventId, void *eventData)
-    {
-        Core *core = static_cast<Core *>(eventArgs);
+    LOG_ERROR("Task runner aborted!");
+    vTaskDelete(nullptr);
+    core->m_taskHandle = nullptr;
+}
 
-        switch (static_cast<TaskEventId>(eventId))
-        {
+void Core::taskEventCallback(void *eventArgs, esp_event_base_t eventBase, int32_t eventId, void *eventData) {
+    Core *core = static_cast<Core *>(eventArgs);
+
+    switch (static_cast<TaskEventId>(eventId)) {
         case TaskEventId::ANY_EVENT:
             LOG_INFO("Received new %s|ANY_EVENT", eventBase);
             break;
@@ -143,15 +126,13 @@ namespace Stepper
             break;
         default:
             LOG_ERROR("Received unknown event %s|%i", eventBase, eventId);
-        }
     }
+}
 
-    void Core::stopEventCallback(void *eventArgs, esp_event_base_t eventBase, int32_t eventId, void *eventData)
-    {
-        Core *core = static_cast<Core *>(eventArgs);
+void Core::stopEventCallback(void *eventArgs, esp_event_base_t eventBase, int32_t eventId, void *eventData) {
+    Core *core = static_cast<Core *>(eventArgs);
 
-        switch (static_cast<StopEventId>(eventId))
-        {
+    switch (static_cast<StopEventId>(eventId)) {
         case StopEventId::ANY_EVENT:
             LOG_INFO("Received new %s|ANY_EVENT", eventBase);
             break;
@@ -172,7 +153,7 @@ namespace Stepper
             break;
         default:
             LOG_ERROR("Received unknown event %s|%i", eventBase, eventId);
-        }
     }
-
 }
+
+} // namespace Stepper

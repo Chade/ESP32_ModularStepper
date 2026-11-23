@@ -70,10 +70,6 @@ private:
 };
 
 } // namespace Generic
-
-namespace Axis {
-    using LinearAxis = Generic::LinearAxis;
-} // namespace Axis
 } // namespace Stepper
 
 #endif // STEPPER_AXIS_LINEAR_HPP

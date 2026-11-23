@@ -71,10 +71,6 @@ private:
 };
 
 } // namespace Generic
-
-namespace Axis {
-    using RotaryAxis = Generic::RotaryAxis;
-} // namespace Axis
 } // namespace Stepper
 
 #endif // STEPPER_AXIS_ROTARY_HPP
