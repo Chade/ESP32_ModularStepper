@@ -42,7 +42,7 @@ void Endstop::init() {
 
     xTaskCreatePinnedToCore(
         Endstop::task,
-        "StepperEndstop",
+        "EndstopTask",
         2048,
         this,
         configMAX_PRIORITIES - 2,

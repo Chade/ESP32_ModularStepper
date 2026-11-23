@@ -29,7 +29,7 @@ namespace ESP32 {
         uint64_t getStepsFast() const;
         
     protected:
-        static void driverTask(void *args);
+        static void task(void *args);
 
         // Update the params for the next step cycle
         void update(uint32_t stepsDone, uint32_t stepsToDo, float pulsePeriodNew, float pulsePeriodIncrement) override = 0;

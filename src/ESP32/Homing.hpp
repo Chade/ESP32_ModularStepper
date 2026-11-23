@@ -35,7 +35,7 @@ public:
     void abortHoming();
 
 protected:
-    static void homingTask(void* args);
+    static void task(void* args);
 
     Generic::Axis* activeAxis_ {nullptr};
     TaskHandle_t homingTaskHandle_ {nullptr};

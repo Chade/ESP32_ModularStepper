@@ -8,7 +8,7 @@ namespace ESP32 {
 
         // Create step task
         xTaskCreatePinnedToCore(
-            Driver::driverTask, /* Task function */
+            Driver::task, /* Task function */
             "StepTask",         /* Task name (max. 16 characters by default) */
             8192,               /* Stack size in bytes */
             this,               /* Parameter passed as input of the task */
@@ -33,7 +33,7 @@ namespace ESP32 {
         }
     }
 
-    void Driver::driverTask(void* args) {
+    void Driver::task(void* args) {
         Driver* self = static_cast<Driver*>(args);
 
         for(;;) {

@@ -272,14 +272,12 @@ void Generator::computeStepProfile(GeneratorState& state) const {
     uint64_t stepsDec = computeRampSteps(state.targetVelocity, state.deceleration);
 
     if (stepsAcc + stepsDec <= state.stepsTotal) {
-        LOG_INFO("Calc trapezoid profile");
         // Trapezoid profile: full acc + dec + const velocity
         state.stepsAcc   = stepsAcc;
         state.stepsDec   = stepsDec;
         state.stepsConst = state.stepsTotal - (stepsAcc + stepsDec);
     } else {
         // Triangular profile: scale acc/dec phases to fit total steps
-        LOG_INFO("Calc triangular profile");
         if (stepsAcc > 0 && stepsDec == 0) {
             state.stepsAcc = state.stepsTotal;
             state.stepsDec = 0;
@@ -306,8 +304,7 @@ void Generator::computeStepProfile(GeneratorState& state) const {
             state.stepsDec = state.stepsTotal * ratioDec;
             state.stepsConst = state.stepsTotal - (state.stepsAcc + state.stepsDec);
         }
-        LOG_INFO("Velocity profile: [%llu|%llu|%llu]", state.stepsAcc, state.stepsConst, state.stepsDec);
-        }
+    }
 }
 
 void Generator::computeStepProfile_v2(GeneratorState& state) const {
@@ -357,14 +354,12 @@ void Generator::computeStepProfile_v2(GeneratorState& state) const {
     }
 
     if (v_peak_sq_raw <= v_max_sq_raw) {
-        LOG_INFO("Calc triangular profile");
         state.stepsAcc = steps_peak_raw / scale;
         state.stepsDec = state.stepsTotal - state.stepsAcc;
         state.stepsConst = 0;
         state.targetVelocity = isqrt64(v_peak_sq_raw) / scale;
-        LOG_INFO("Target velocity will not be reached, new target velocity: %.2f steps/s", static_cast<float>(state.targetVelocity));
+        LOG_WARN("Target velocity will not be reached, new target velocity: %.2f steps/s", static_cast<float>(state.targetVelocity));
     } else {
-        LOG_INFO("Calc trapezoid profile");
         if (v_start_raw < v_max_raw) {
             // (v_max - v_start)² / (2*acc_raw) = (v_max² -2*vmax*v_start + v_start²) / (2*acc_raw)
             state.stepsAcc = (acc_raw > 0) ? (v_max_sq_raw - 2 * v_max_raw * v_start_raw + v_start_sq_raw) / (2 * acc_raw * scale) : 0;
@@ -478,7 +473,6 @@ void Generator::advanceStateAfterStep(uint32_t steps, GeneratorState& state) con
             // Determine phase by stepsDone
             if (state.stepsDone >= state.stepsTotal) {
                 // Stopping
-                LOG_INFO("Target steps reached [%llu/%llu/%lu]", state.stepsDone, state.stepsTotal, steps);
                 state.targetVelocity = 0;
                 state.currentVelocity = 0;
             }
@@ -503,7 +497,6 @@ void Generator::advanceStateAfterStep(uint32_t steps, GeneratorState& state) con
             state.currentVelocity = computeVelocity(state.deceleration, state.currentVelocity, UQ20x12(0), steps);
         }
         if (state.currentVelocity == 0) {
-            LOG_INFO("Do direction change");
             // Reached stand-still, change direction
             // We will not transition to State:Stopped, to indicate the movement is not finished yet
             updateState(state, State::Accelerating);
@@ -530,11 +523,10 @@ void Generator::advanceStateAfterStep(uint32_t steps, GeneratorState& state) con
         // Check if system has reached standstill
         if (state.currentVelocity == 0 && state.targetVelocity == 0) {
             if (state.stepsTotal > 0 && state.stepsDone < state.stepsTotal) {
-                LOG_INFO("Current velocity: 0 steps/s but still %llu steps to go", (state.stepsTotal - state.stepsDone));
+                LOG_WARN("Current velocity: 0 steps/s but still %llu steps to go", (state.stepsTotal - state.stepsDone));
                 state.currentVelocity = lastVelocity;
             }
             else {
-                LOG_INFO("Standstill reached (%llu/%llu/%lu)", state.stepsDone, state.stepsTotal, steps);
                 updateState(state, State::Stopped);
             }
         }

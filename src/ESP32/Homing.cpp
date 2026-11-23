@@ -59,7 +59,7 @@ bool Homing::homeAsync(Generic::Axis& axis, const Config& config, HomingCallback
     }
 
     BaseType_t res = xTaskCreatePinnedToCore(
-        Homing::homingTask,       /* Task function */
+        Homing::task,       /* Task function */
         "HomingTask",             /* Task name (max. 16 characters by default) */
         4096,                     /* Stack size in bytes */
         this,                     /* Parameter passed as input of the task */
@@ -174,7 +174,7 @@ void Homing::abortHoming() {
     }
 }
 
-void Homing::homingTask(void* args) {
+void Homing::task(void* args) {
     Homing* self = static_cast<Homing*>(args);
 
     LOG_INFO("FreeRTOS homing task started");
