@@ -3,8 +3,18 @@
 
 namespace Stepper {
 namespace ESP32 {
+    Driver::Driver(Generic::Pin* enablePin, Generic::Pin& stepPin, Generic::Pin& directionPin, uint8_t microsteps)
+            : Generic::Driver(enablePin, stepPin, directionPin, microsteps) {
+    }
+
     Driver::Driver(Generic::Pin& enablePin, Generic::Pin& stepPin, Generic::Pin& directionPin, uint8_t microsteps)
             : Generic::Driver(enablePin, stepPin, directionPin, microsteps) {
+    }
+
+    bool Driver::init() {
+        if (taskHandle_ != nullptr) {
+            return true;
+        }
 
         // Create step task
         BaseType_t res = xTaskCreatePinnedToCore(
@@ -19,22 +29,23 @@ namespace ESP32 {
 
         if (res != pdPASS) {
             LOG_ERROR("Failed to create FreeRTOS driver task");
+            taskHandle_ = nullptr;
+            return false;
         }
 
-        // esp_task_wdt_config_t config = {
-        //     .timeout_ms = 60000,
-        //     .idle_core_mask = 0, // Do not watch any idle task
-        //     .trigger_panic = true,
-        // };
-        // esp_task_wdt_reconfigure(&config);
-        //ESP_ERROR_CHECK(esp_task_wdt_add(taskHandle_));
+        return true;
     }
 
     Driver::~Driver() {
-        // Delete step task
-        if (taskHandle_ != nullptr)
-        {
-            vTaskDelete(taskHandle_);
+        // Atomically detach taskHandle_ before deleting the task so no ISR can notify a deleted handle
+        TaskHandle_t handleToDelete = nullptr;
+        portENTER_CRITICAL(&stepCountMux_);
+        handleToDelete = taskHandle_;
+        taskHandle_ = nullptr;
+        portEXIT_CRITICAL(&stepCountMux_);
+
+        if (handleToDelete != nullptr) {
+            vTaskDelete(handleToDelete);
         }
     }
 
@@ -82,47 +93,59 @@ namespace ESP32 {
     }
 
     bool Driver::notifyStepDone(bool immidiately) {
-        if (taskHandle_ != nullptr)
-        {
-            portENTER_CRITICAL(&stepCountMux_);
-            isrStepCount_++;
-            bool notify = (isrStepCount_ >= isrStepThreshold_);
-            portEXIT_CRITICAL(&stepCountMux_);
+        TaskHandle_t handle = nullptr;
+        uint32_t steps = 0;
+        bool shouldNotify = false;
 
-            if (notify || immidiately) {
-                portENTER_CRITICAL(&stepCountMux_);
-                uint32_t steps = isrStepCount_;
+        portENTER_CRITICAL(&stepCountMux_);
+        handle = taskHandle_;
+        if (handle != nullptr) {
+            isrStepCount_++;
+            if (immidiately || isrStepCount_ >= isrStepThreshold_) {
+                steps = isrStepCount_;
                 isrStepCount_ = 0;
                 isrStepThreshold_ = UINT32_MAX; // suppress notifications during callback
-                portEXIT_CRITICAL(&stepCountMux_);
-                return xTaskNotify(taskHandle_, steps, eNotifyAction::eSetBits);
+                shouldNotify = true;
             }
-            return true;
         }
-        return false;
+        portEXIT_CRITICAL(&stepCountMux_);
+
+        if (handle == nullptr) {
+            return false;
+        }
+        if (shouldNotify) {
+            return xTaskNotify(handle, steps, eNotifyAction::eSetBits) == pdPASS;
+        }
+        return true;
     }
 
     bool IRAM_ATTR Driver::notifyStepDoneFromISR(BaseType_t* pxHigherPriorityTaskWoken, bool immidiately) {
-        if (taskHandle_ != nullptr)
-        {
-            portENTER_CRITICAL(&stepCountMux_);
-            isrStepCount_++;
-            bool notify = (isrStepCount_ >= isrStepThreshold_);
-            portEXIT_CRITICAL(&stepCountMux_);
+        TaskHandle_t handle = nullptr;
+        uint32_t steps = 0;
+        bool shouldNotify = false;
 
-            if (notify || immidiately) {
-                portENTER_CRITICAL(&stepCountMux_);
-                uint32_t steps = isrStepCount_;
+        portENTER_CRITICAL_ISR(&stepCountMux_);
+        handle = taskHandle_;
+        if (handle != nullptr) {
+            isrStepCount_++;
+            if (immidiately || isrStepCount_ >= isrStepThreshold_) {
+                steps = isrStepCount_;
                 isrStepCount_ = 0;
                 isrStepThreshold_ = UINT32_MAX; // suppress notifications during callback
-                portEXIT_CRITICAL(&stepCountMux_);
-                BaseType_t xHigherPriorityTaskWokenLocal = pdFALSE;
-                BaseType_t* pFlag = pxHigherPriorityTaskWoken ? pxHigherPriorityTaskWoken : &xHigherPriorityTaskWokenLocal;
-                return xTaskNotifyFromISR(taskHandle_, steps, eNotifyAction::eSetBits, pFlag);
+                shouldNotify = true;
             }
-            return true;
         }
-        return false;
+        portEXIT_CRITICAL_ISR(&stepCountMux_);
+
+        if (handle == nullptr) {
+            return false;
+        }
+        if (shouldNotify) {
+            BaseType_t xHigherPriorityTaskWokenLocal = pdFALSE;
+            BaseType_t* pFlag = pxHigherPriorityTaskWoken ? pxHigherPriorityTaskWoken : &xHigherPriorityTaskWokenLocal;
+            return xTaskNotifyFromISR(handle, steps, eNotifyAction::eSetBits, pFlag) == pdPASS;
+        }
+        return true;
     }
 
     void Driver::forceStepCallback() {
@@ -152,8 +175,12 @@ namespace ESP32 {
             return true;
         }
 
-        if (taskHandle_ != nullptr) {
-            return xTaskNotify(taskHandle_, notification.raw, eNotifyAction::eSetBits);
+        portENTER_CRITICAL(&stepCountMux_);
+        TaskHandle_t handle = taskHandle_;
+        portEXIT_CRITICAL(&stepCountMux_);
+
+        if (handle != nullptr) {
+            return xTaskNotify(handle, notification.raw, eNotifyAction::eSetBits) == pdPASS;
         }
         return false;
     }
@@ -173,10 +200,14 @@ namespace ESP32 {
             return true;
         }
 
-        if (taskHandle_ != nullptr) {
+        portENTER_CRITICAL_ISR(&stepCountMux_);
+        TaskHandle_t handle = taskHandle_;
+        portEXIT_CRITICAL_ISR(&stepCountMux_);
+
+        if (handle != nullptr) {
             BaseType_t xHigherPriorityTaskWokenLocal = pdFALSE;
             BaseType_t* pFlag = pxHigherPriorityTaskWoken ? pxHigherPriorityTaskWoken : &xHigherPriorityTaskWokenLocal;
-            return xTaskNotifyFromISR(taskHandle_, notification.raw, eNotifyAction::eSetBits, pFlag);
+            return xTaskNotifyFromISR(handle, notification.raw, eNotifyAction::eSetBits, pFlag) == pdPASS;
         }
         return false;
     }

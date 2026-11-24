@@ -4,21 +4,32 @@
 namespace Stepper {
 namespace Generic {
 
+Driver::Driver(Generic::Pin* enablePin, Generic::Pin& stepPin, Generic::Pin& directionPin, uint8_t microsteps)
+        : pinEnable_(enablePin), pinStep_(stepPin), pinDirection_(directionPin), enabled_(enablePin == nullptr), microsteps_(microsteps) {
+
+}
+
 Driver::Driver(Generic::Pin& enablePin, Generic::Pin& stepPin, Generic::Pin& directionPin, uint8_t microsteps)
-        : pinEnable_(enablePin), pinStep_(stepPin), pinDirection_(directionPin), microsteps_(microsteps) {
+        : Driver(&enablePin, stepPin, directionPin, microsteps) {
 
 }
 
 void Driver::enable() {
-    pinEnable_.enable();
+    if (pinEnable_ != nullptr) {
+        pinEnable_->enable();
+    }
+    enabled_ = true;
 }
 
 void Driver::disable() {
-    pinEnable_.disable();
+    if (pinEnable_ != nullptr) {
+        pinEnable_->disable();
+    }
+    enabled_ = false;
 }
 
 bool Driver::isEnabled() const {
-    return pinEnable_.isEnabled();
+    return (pinEnable_ != nullptr) ? pinEnable_->isEnabled() : enabled_;
 }
 
 void Driver::reset(bool resetSteps) {

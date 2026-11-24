@@ -14,10 +14,11 @@ using DriverCallback = std::function<void(uint32_t stepsDone, uint32_t& stepsToD
 class Driver {
 public:
     Driver() = delete;
+    explicit Driver(Generic::Pin* enablePin, Generic::Pin& stepPin, Generic::Pin& directionPin, uint8_t microsteps = 1);
     explicit Driver(Generic::Pin& enablePin, Generic::Pin& stepPin, Generic::Pin& directionPin, uint8_t microsteps = 1);
     virtual ~Driver() = default;
 
-    virtual void init() = 0;
+    virtual bool init() = 0;
     virtual void start() = 0;
     virtual void stop() = 0;
     virtual bool isRunning() = 0;
@@ -26,6 +27,7 @@ public:
     virtual void enable();
     virtual void disable();
     virtual bool isEnabled() const;
+    bool hasEnablePin() const { return pinEnable_ != nullptr; }
     
     virtual void setDirection(Direction direction);
     virtual Direction getDirection() const;
@@ -54,9 +56,10 @@ protected:
     // Update the params for the next step cycle
     virtual void update(uint32_t stepsDone, uint32_t stepsToDo, float pulsePeriodNew, float pulsePeriodIncrement) = 0;
     
-    Generic::Pin& pinEnable_;
+    Generic::Pin* pinEnable_ {nullptr};
     Generic::Pin& pinStep_;
     Generic::Pin& pinDirection_;
+    bool enabled_ {true};
 
     float minPulseWidthHigh_us_ {1.0f};
     float minPulseWidthLow_us_ {1.0f};

@@ -26,7 +26,8 @@ bool isInputCompatible(Generic::Pin::IoMode mode) {
 // =============================================================================
 
 std::unique_ptr<MotorAssembly> MotorAssembly::create(const Generic::MotorConfig& config,
-                                                     Generic::StopController* stopController) {
+                                                     Generic::StopController* stopController,
+                                                     Generic::Pin* sharedEnablePin) {
     if (config.driver.microsteps == 0) {
         LOG_ERROR("Invalid MotorConfig: microsteps must be > 0");
         return nullptr;
@@ -42,8 +43,15 @@ std::unique_ptr<MotorAssembly> MotorAssembly::create(const Generic::MotorConfig&
 
     std::unique_ptr<MotorAssembly> assembly(new MotorAssembly());
 
-    // 1. Pins
-    assembly->pinEnable_    = createPin(config.driver.enablePin);
+    // 1. Pins (enablePin is optional or may be shared across multiple drivers)
+    if (sharedEnablePin != nullptr) {
+        assembly->enablePinPtr_ = sharedEnablePin;
+    } else if (config.driver.hasEnablePin) {
+        assembly->pinEnable_    = createPin(config.driver.enablePin);
+        assembly->enablePinPtr_ = assembly->pinEnable_.get();
+    } else {
+        assembly->enablePinPtr_ = nullptr;
+    }
     assembly->pinStep_      = createPin(config.driver.stepPin);
     assembly->pinDirection_ = createPin(config.driver.directionPin);
 
@@ -51,10 +59,11 @@ std::unique_ptr<MotorAssembly> MotorAssembly::create(const Generic::MotorConfig&
     switch (config.driver.type) {
         case Generic::DriverConfig::Type::MCPWM:
             assembly->driver_ = std::make_unique<ESP32::MCPWM::Driver>(
-                *assembly->pinEnable_,
+                assembly->enablePinPtr_,
                 *assembly->pinStep_,
                 *assembly->pinDirection_,
-                config.driver.microsteps);
+                config.driver.microsteps,
+                config.driver.mcpwmGroupId);
             break;
         default:
             LOG_ERROR("Unsupported DriverConfig::Type: %u", static_cast<unsigned>(config.driver.type));
@@ -67,8 +76,12 @@ std::unique_ptr<MotorAssembly> MotorAssembly::create(const Generic::MotorConfig&
         config.driver.directionDelay_us,
         config.driver.enableDelay_us);
 
-    // 3. Generator (registers callback and initializes driver)
+    // 3. Generator (registers callback, then initializes RTOS & MCPWM hardware)
     assembly->generator_ = std::make_unique<ESP32::Generator>(*assembly->driver_);
+    if (!assembly->generator_->init()) {
+        LOG_ERROR("MotorAssembly: failed to initialize generator/driver");
+        return nullptr;
+    }
 
     // 4. Motor
     assembly->motor_ = std::make_unique<Generic::Motor>(
@@ -198,8 +211,9 @@ AxisAssembly::~AxisAssembly() {
 // =============================================================================
 
 std::unique_ptr<LinearAxisAssembly> LinearAxisAssembly::create(const Generic::LinearAxisConfig& config,
-                                                               Generic::StopController* stopController) {
-    auto motorAssembly = MotorAssembly::create(config.motor);
+                                                               Generic::StopController* stopController,
+                                                               Generic::Pin* sharedEnablePin) {
+    auto motorAssembly = MotorAssembly::create(config.motor, nullptr, sharedEnablePin);
     if (!motorAssembly) {
         return nullptr;
     }
@@ -236,8 +250,9 @@ std::unique_ptr<LinearAxisAssembly> LinearAxisAssembly::create(std::unique_ptr<M
 // =============================================================================
 
 std::unique_ptr<RotaryAxisAssembly> RotaryAxisAssembly::create(const Generic::RotaryAxisConfig& config,
-                                                               Generic::StopController* stopController) {
-    auto motorAssembly = MotorAssembly::create(config.motor);
+                                                               Generic::StopController* stopController,
+                                                               Generic::Pin* sharedEnablePin) {
+    auto motorAssembly = MotorAssembly::create(config.motor, nullptr, sharedEnablePin);
     if (!motorAssembly) {
         return nullptr;
     }

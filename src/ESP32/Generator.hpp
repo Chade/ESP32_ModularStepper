@@ -15,6 +15,7 @@ namespace ESP32 {
         explicit Generator(Generic::Driver& driver);
         virtual ~Generator() override;
 
+        bool init() override;
         State waitForState(State state, uint32_t timeout_ms = UINT32_MAX) const override;
 
     private:

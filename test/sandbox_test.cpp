@@ -1,149 +1,47 @@
+#include <cmath>
+#include <cstdint>
 #include <iostream>
-#include <cassert>
-#include <iomanip>
-#include <chrono>
-#include <random>
-#include <vector>
+#include <string>
 
 #include <FixedPoints.h>
 #include <FixedPointsCommon.h>
-// Include project headers using host stubs
-#include "Generic/Generator.hpp"
+
+#include "Generic/Axis.hpp"
+#include "Generic/Axis_Linear.hpp"
+#include "Generic/Axis_Rotary.hpp"
+#include "Generic/Helper.hpp"
+#include "Generic/Homing.hpp"
+#include "Generic/Motor.hpp"
+#include "Generic/StopController.hpp"
 #include "StepperDriver_Mock.hpp"
 #include "StepperEndstop_Mock.hpp"
-#include "Generic/Helper.hpp"
-#include "Generic/Motor.hpp"
-#include "Generic/Axis.hpp"
-#include "Generic/Axis_Rotary.hpp"
-#include "Generic/Axis_Linear.hpp"
-#include "Generic/Homing.hpp"
+#include "StepperGenerator_Mock.hpp"
 
-using UQ20x12 = UFixed<20,12>;
+using UQ20x12 = UFixed<20, 12>;
 
-// Helper print function for test assertions
+namespace {
+int g_passedTests = 0;
+int g_failedTests = 0;
+} // namespace
+
 void printTestResult(const std::string& testName, bool success) {
     if (success) {
+        g_passedTests++;
         std::cout << "[PASS] " << testName << std::endl;
     } else {
+        g_failedTests++;
         std::cout << "[FAIL] " << testName << std::endl;
     }
 }
 
-void printGeneratorState(const Stepper::Generic::Generator::GeneratorState& state) {
-    std::cout << "Generator State: " << static_cast<int>(state.currentState)  << " | " << static_cast<int>(state.previousState) << std::endl;
-    std::cout << "  Direction: " << static_cast<int>(state.currentDirection) << " | " << static_cast<int>(state.targetDirection) << std::endl;
-    std::cout << "  Velocity: " << static_cast<float>(state.currentVelocity) << " steps/s" << " --> " << static_cast<float>(state.targetVelocity) << " steps/s" << std::endl;
-    std::cout << "  Acceleration: " << static_cast<float>(state.acceleration) << " steps/s^2" << "  Deceleration: " << static_cast<float>(state.deceleration) << " steps/s^2" << std::endl;
-    std::cout << "  Steps: " << state.stepsDone << "/" << state.stepsTotal << " [" << state.stepsAcc << "|" << state.stepsConst << "|" << state.stepsDec << "]" << std::endl;
-}
-
-void testStepperGenerator() {
-    std::cout << "\n=== Testing Stepper Generator ===" << std::endl;
-
-    Stepper::Mock::Pin pin(0);
-    Stepper::Mock::Driver driver(pin, pin, pin);
-    Stepper::Generic::Generator generator(driver);
-
-    // Test position mode task (steps > 0)
-    Stepper::Generic::Generator::GeneratorTask task;
-    task.steps = 1000;
-    task.velocity = 1000.0f;
-    task.acceleration = 1000.0f;
-    task.deceleration = 1000.0f;
-    task.direction = Stepper::Direction::Clockwise;
-
-    generator.run(task);
-    printGeneratorState(generator.getState());
-
-    for (uint32_t i = 0; i < task.steps; ++i) {
-        generator.advanceStateAfterStep(1);
-        printGeneratorState(generator.getState());
-    }
-}
-
-void testStepperGeneratorZeroAcc() {
-    std::cout << "\n=== Testing Stepper Generator With Zero Acc ===" << std::endl;
-
-    Stepper::Mock::Pin pin(0);
-    Stepper::Mock::Driver driver(pin, pin, pin);
-    Stepper::Generic::Generator generator(driver);
-
-    // Test position mode task (steps > 0)
-    Stepper::Generic::Generator::GeneratorTask task;
-    task.steps = 20;
-    task.velocity = 10.0f;
-    task.acceleration = 0.0f;
-    task.deceleration = 10.0f;
-    task.direction = Stepper::Direction::Clockwise;
-
-    generator.run(task);
-    printGeneratorState(generator.getState());
-
-    for (uint32_t i = 0; i < task.steps; ++i) {
-        generator.advanceStateAfterStep(1);
-        printGeneratorState(generator.getState());
-    }
-}
-
-void testStepperGeneratorZeroDec() {
-    std::cout << "\n=== Testing Stepper Generator With Zero Dec ===" << std::endl;
-
-    Stepper::Mock::Pin pin(0);
-    Stepper::Mock::Driver driver(pin, pin, pin);
-    Stepper::Generic::Generator generator(driver);
-
-    // Test position mode task (steps > 0)
-    Stepper::Generic::Generator::GeneratorTask task;
-    task.steps = 20;
-    task.velocity = 10.0f;
-    task.acceleration = 10.0f;
-    task.deceleration = 0.0f;
-    task.direction = Stepper::Direction::Clockwise;
-
-    generator.run(task);
-    printGeneratorState(generator.getState());
-
-    for (uint32_t i = 0; i < task.steps; ++i) {
-        generator.advanceStateAfterStep(1);
-        printGeneratorState(generator.getState());
-    }
-}
-
-void testStepperGeneratorZeroAccDec() {
-    std::cout << "\n=== Testing Stepper Generator With Zero Acc & Dec ===" << std::endl;
-
-    Stepper::Mock::Pin pin(0);
-    Stepper::Mock::Driver driver(pin, pin, pin);
-    Stepper::Generic::Generator generator(driver);
-
-    // Test position mode task (steps > 0)
-    Stepper::Generic::Generator::GeneratorTask task;
-    task.steps = 20;
-    task.velocity = 10.0f;
-    task.acceleration = 0.0f;
-    task.deceleration = 0.0f;
-    task.direction = Stepper::Direction::Clockwise;
-
-    generator.run(task);
-    printGeneratorState(generator.getState());
-
-    for (uint32_t i = 0; i < task.steps; ++i) {
-        generator.advanceStateAfterStep(1);
-        printGeneratorState(generator.getState());
-    }
-}
-
-// Pure C++ Function Tests
 void testEnumHelpers() {
     std::cout << "\n=== Testing StepperHelper Enums ===" << std::endl;
 
     auto dirVal = Stepper::cast_enum_to_base(Stepper::Direction::Counterclockwise);
-    bool checkDir = (dirVal == 1);
-    printTestResult("Direction cast_enum_to_base (Counterclockwise == 1)", checkDir);
+    printTestResult("Direction cast_enum_to_base (Counterclockwise == 1)", dirVal == 1);
 
     auto stateVal = Stepper::cast_enum_to_base(Stepper::State::Accelerating);
-    bool checkState = (stateVal == 6);
-    printTestResult("State cast_enum_to_base (Accelerating == 6)", checkState);
+    printTestResult("State cast_enum_to_base (Accelerating == 6)", stateVal == 6);
 
     auto compared = Stepper::compare_enums(Stepper::State::Accelerating, Stepper::State::Running);
     printTestResult("State bitwise compare_enums", compared == (6 & 2));
@@ -151,25 +49,18 @@ void testEnumHelpers() {
 
 void testFixedPointSquareroot() {
     std::cout << "\n=== Testing Squareroot Calculation ===" << std::endl;
+
     UQ20x12 v1 = 2.0;
     UQ20x12 v2 = 16.0;
     UQ20x12 v3 = 100.0;
     UQ20x12 v4 = 0.25;
-    UQ20x12 result;
-    
-    result = Stepper::sqrt(v1);
+
+    UQ20x12 result = Stepper::sqrt(v1);
     printTestResult("FixedPoint sqrt(2.0)", (result > 1.41 && result < 1.42));
+    printTestResult("FixedPoint sqrt(16.0)", Stepper::sqrt(v2) == 4.0);
+    printTestResult("FixedPoint sqrt(100.0)", Stepper::sqrt(v3) == 10.0);
+    printTestResult("FixedPoint sqrt(0.25)", Stepper::sqrt(v4) == 0.5);
 
-    result = Stepper::sqrt(v2);
-    printTestResult("FixedPoint sqrt(16.0)", (result == 4.0));
-
-    result = Stepper::sqrt(v3);
-    printTestResult("FixedPoint sqrt(100.0)", (result == 10.0));
-
-    result = Stepper::sqrt(v4);
-    printTestResult("FixedPoint sqrt(0.25)", (result == 0.5));
-
-    // Verify 64-bit integer square root edge cases
     printTestResult("isqrt64(0) == 0", Stepper::isqrt64(0) == 0);
     printTestResult("isqrt64(1) == 1", Stepper::isqrt64(1) == 1);
     printTestResult("isqrt64(2) == 1", Stepper::isqrt64(2) == 1);
@@ -180,55 +71,124 @@ void testFixedPointSquareroot() {
     printTestResult("isqrt64(UINT64_MAX) == 4294967295", Stepper::isqrt64(UINT64_MAX) == 4294967295ULL);
 }
 
-void testBatchKinematics() {
-    std::cout << "\n=== Testing Batch Kinematics (Multi-Step Advances) ===" << std::endl;
-    Stepper::Mock::Pin pin(0);
-    Stepper::Mock::Driver driver(pin, pin, pin);
-    Stepper::Generic::Generator generator(driver);
+void testStepperGeneratorKinematics() {
+    std::cout << "\n=== Testing Stepper Generator Kinematics ===" << std::endl;
 
-    Stepper::Generic::Generator::GeneratorTask task;
-    task.steps = 1000;
-    task.velocity = 1000.0f;
-    task.acceleration = 1000.0f;
-    task.deceleration = 1000.0f;
-    task.direction = Stepper::Direction::Clockwise;
+    auto runToDone = [](Stepper::Mock::Generator& gen, Stepper::Mock::Driver& drv, const Stepper::Generic::Generator::GeneratorTask& task) {
+        if (!gen.run(task)) {
+            return false;
+        }
+        return drv.stepLoop();
+    };
 
-    generator.run(task);
-    printGeneratorState(generator.getState());
+    // 1. Trapezoid step mode (1000 steps)
+    {
+        Stepper::Mock::Pin pin(0);
+        Stepper::Mock::Driver driver(pin, pin, pin);
+        Stepper::Mock::Generator generator(driver);
+        generator.init();
+        driver.enable();
 
-    // Advance 500 steps at a time during acceleration
-    generator.advanceStateAfterStep(500);
-    float v1 = generator.getVelocity();
-    printGeneratorState(generator.getState());
+        Stepper::Generic::Generator::GeneratorTask task;
+        task.steps = 1000;
+        task.velocity = 1000.0f;
+        task.acceleration = 1000.0f;
+        task.deceleration = 1000.0f;
+        task.direction = Stepper::Direction::Counterclockwise;
 
-    generator.advanceStateAfterStep(500);
-    float v2 = generator.getVelocity();
-    printGeneratorState(generator.getState());
+        bool ok = runToDone(generator, driver, task);
+        auto st = generator.getState();
+        printTestResult("Trapezoid 1000-step move finishes Stopped", ok && st.currentState == Stepper::State::Stopped);
+        printTestResult("Trapezoid 1000-step move reaches exact position", st.stepsPosition == 1000 && st.stepsDone == 1000);
+    }
 
-    // Kinematics expected: sqrt(2 * 100 * 50) = sqrt(10000) = 100.0 steps/s
-    bool checkBatchAcc = (v1 > 999.0f && v1 < 1001.0f && v2 < 1.0);
-    printTestResult("Batch Step Acceleration (500 steps)", checkBatchAcc);
-}
+    // 2. Zero acceleration
+    {
+        Stepper::Mock::Pin pin(0);
+        Stepper::Mock::Driver driver(pin, pin, pin);
+        Stepper::Mock::Generator generator(driver);
+        generator.init();
+        driver.enable();
 
+        Stepper::Generic::Generator::GeneratorTask task;
+        task.steps = 20;
+        task.velocity = 10.0f;
+        task.acceleration = 0.0f;
+        task.deceleration = 10.0f;
+        task.direction = Stepper::Direction::Clockwise;
 
+        bool ok = runToDone(generator, driver, task);
+        auto st = generator.getState();
+        printTestResult("Zero-acc 20-step move completes exactly", ok && st.stepsDone == 20 && st.stepsPosition == -20);
+    }
 
-void testStepProfileGeneration() {
-    std::cout << "\n=== Testing Step Profile generation ===" << std::endl;
+    // 3. Zero deceleration
+    {
+        Stepper::Mock::Pin pin(0);
+        Stepper::Mock::Driver driver(pin, pin, pin);
+        Stepper::Mock::Generator generator(driver);
+        generator.init();
+        driver.enable();
 
-    Stepper::Generic::Generator::GeneratorState state;
-    state.stepsTotal = 1249;
-    state.currentVelocity = 500.0f;
-    state.targetVelocity = 0.0f;
-    state.acceleration = 100.0f;
-    state.deceleration = 100.0f;
-    state.currentDirection = Stepper::Direction::Clockwise;
-    state.targetDirection = Stepper::Direction::Clockwise;
+        Stepper::Generic::Generator::GeneratorTask task;
+        task.steps = 20;
+        task.velocity = 10.0f;
+        task.acceleration = 10.0f;
+        task.deceleration = 0.0f;
+        task.direction = Stepper::Direction::Clockwise;
 
-    Stepper::Generic::Generator::computeStepProfile(state);
-    printGeneratorState(state);
+        bool ok = runToDone(generator, driver, task);
+        auto st = generator.getState();
+        printTestResult("Zero-dec 20-step move completes exactly", ok && st.stepsDone == 20 && st.stepsPosition == -20);
+    }
 
-    Stepper::Generic::Generator::computeStepProfile_v2(state);
-    printGeneratorState(state);
+    // 4. Zero acceleration and deceleration
+    {
+        Stepper::Mock::Pin pin(0);
+        Stepper::Mock::Driver driver(pin, pin, pin);
+        Stepper::Mock::Generator generator(driver);
+        generator.init();
+        driver.enable();
+
+        Stepper::Generic::Generator::GeneratorTask task;
+        task.steps = 20;
+        task.velocity = 10.0f;
+        task.acceleration = 0.0f;
+        task.deceleration = 0.0f;
+        task.direction = Stepper::Direction::Clockwise;
+
+        bool ok = runToDone(generator, driver, task);
+        auto st = generator.getState();
+        printTestResult("Zero-acc/dec 20-step move completes exactly", ok && st.stepsDone == 20 && st.stepsPosition == -20);
+    }
+
+    // 5. Batch step acceleration kinematics (stepsAcc=500, stepsConst=1000, stepsDec=500)
+    {
+        Stepper::Mock::Pin pin(0);
+        Stepper::Mock::Driver driver(pin, pin, pin);
+        Stepper::Mock::Generator generator(driver);
+        generator.init();
+        driver.enable();
+
+        Stepper::Generic::Generator::GeneratorTask task;
+        task.steps = 2000;
+        task.velocity = 1000.0f;
+        task.acceleration = 1000.0f;
+        task.deceleration = 1000.0f;
+        task.direction = Stepper::Direction::Clockwise;
+
+        generator.run(task);
+        generator.advanceStateAfterStep(250);
+        float v1 = generator.getVelocity();
+        generator.advanceStateAfterStep(250);
+        float v2 = generator.getVelocity();
+        generator.advanceStateAfterStep(1500);
+        float v3 = generator.getVelocity();
+
+        // After 250 steps: sqrt(v0^2 + 2*1000*250) ~ 708.5 steps/s; at 500 steps: 1000 steps/s; at 2000 steps: 0
+        printTestResult("Batch Step Acceleration (250 -> ~708.5, 500 -> 1000, 2000 -> 0)",
+                        v1 > 700.0f && v1 < 715.0f && v2 > 999.0f && v2 < 1001.0f && v3 < 1.0f);
+    }
 }
 
 void testStepperEndstop() {
@@ -239,10 +199,9 @@ void testStepperEndstop() {
 
     printTestResult("Endstop pin number", endstop.getPin().getPin() == 15);
 
-    // Test 1: Callback for both rising and falling edges
     int risingCount = 0;
     int fallingCount = 0;
-    endstop.registerCallback([&risingCount, &fallingCount](Stepper::Generic::Endstop::Edge edge, void* ctx) {
+    endstop.registerCallback([&risingCount, &fallingCount](Stepper::Generic::Endstop::Edge edge, void*) {
         if (edge == Stepper::Generic::Endstop::Edge::Rising) {
             risingCount++;
         } else if (edge == Stepper::Generic::Endstop::Edge::Falling) {
@@ -257,7 +216,6 @@ void testStepperEndstop() {
     printTestResult("Both-edge callback rising count == 2", risingCount == 2);
     printTestResult("Both-edge callback falling count == 1", fallingCount == 1);
 
-    // Test 2: Separate callbacks for rising and falling
     int separateRisingCount = 0;
     int separateFallingCount = 0;
     void* ctxRising = reinterpret_cast<void*>(0x1234);
@@ -265,12 +223,12 @@ void testStepperEndstop() {
     void* receivedCtxRising = nullptr;
     void* receivedCtxFalling = nullptr;
 
-    endstop.registerCallbackOnRising([&separateRisingCount, &receivedCtxRising](Stepper::Generic::Endstop::Edge edge, void* ctx) {
+    endstop.registerCallbackOnRising([&separateRisingCount, &receivedCtxRising](Stepper::Generic::Endstop::Edge, void* ctx) {
         separateRisingCount++;
         receivedCtxRising = ctx;
     }, ctxRising);
 
-    endstop.registerCallbackOnFalling([&separateFallingCount, &receivedCtxFalling](Stepper::Generic::Endstop::Edge edge, void* ctx) {
+    endstop.registerCallbackOnFalling([&separateFallingCount, &receivedCtxFalling](Stepper::Generic::Endstop::Edge, void* ctx) {
         separateFallingCount++;
         receivedCtxFalling = ctx;
     }, ctxFalling);
@@ -283,16 +241,14 @@ void testStepperEndstop() {
     printTestResult("Separate callback on falling triggers", separateRisingCount == 1 && separateFallingCount == 1);
     printTestResult("Separate callback receives falling ctx", receivedCtxFalling == ctxFalling);
 
-    // Test 3: SimpleCallback overload (void(Edge))
     int simpleCallbackCount = 0;
-    endstop.registerCallback([&simpleCallbackCount](Stepper::Generic::Endstop::Edge edge) {
+    endstop.registerCallback([&simpleCallbackCount](Stepper::Generic::Endstop::Edge) {
         simpleCallbackCount++;
     });
     endstop.simulateEdge(Stepper::Generic::Endstop::Edge::Rising);
     endstop.simulateEdge(Stepper::Generic::Endstop::Edge::Falling);
     printTestResult("SimpleCallback called for both edges", simpleCallbackCount == 2);
 
-    // Test 4: VoidCallback overload (void())
     int voidRisingCount = 0;
     endstop.registerCallbackOnRising([&voidRisingCount]() {
         voidRisingCount++;
@@ -301,7 +257,6 @@ void testStepperEndstop() {
     endstop.simulateEdge(Stepper::Generic::Endstop::Edge::Falling);
     printTestResult("VoidCallback called for rising edge only", voidRisingCount == 1);
 
-    // Test 5: Disable suppresses callbacks
     endstop.disableInterrupt();
     int countWhileDisabled = voidRisingCount;
     endstop.simulateEdge(Stepper::Generic::Endstop::Edge::Rising);
@@ -310,20 +265,53 @@ void testStepperEndstop() {
     endstop.simulateEdge(Stepper::Generic::Endstop::Edge::Rising);
     printTestResult("Re-enabled endstop triggers callback", voidRisingCount == countWhileDisabled + 1);
 
-    // Test 6: Unregister callbacks
     endstop.unregisterCallback();
     int countAfterUnregister = voidRisingCount;
     endstop.simulateEdge(Stepper::Generic::Endstop::Edge::Rising);
     endstop.simulateEdge(Stepper::Generic::Endstop::Edge::Falling);
     printTestResult("Unregistered callback receives no events", voidRisingCount == countAfterUnregister);
 
-    // Test 7: PullMode
     endstop.setPullMode(Stepper::Generic::Pin::PullMode::PullDown);
     printTestResult("PullMode set/get", endstop.getPullMode() == Stepper::Generic::Pin::PullMode::PullDown);
 
-    // Test 8: Debounce
     endstop.setDebounceUs(1000);
     printTestResult("Debounce set/get", endstop.getDebounceUs() == 1000);
+}
+
+void testStepCountExactness() {
+    std::cout << "\n=== Testing Step Count Exactness (90 deg @ 200 steps/rev x 16 microsteps) ===" << std::endl;
+
+    Stepper::Mock::Pin pinEnable(1);
+    Stepper::Mock::Pin pinStep(2);
+    Stepper::Mock::Pin pinDir(3);
+    Stepper::Mock::Driver driver(pinEnable, pinStep, pinDir, 16);
+    Stepper::Mock::Generator generator(driver);
+    generator.init();
+    driver.enable();
+    Stepper::Generic::Motor motor(generator, 200, 1.0f);
+    Stepper::Generic::RotaryAxis axis(motor, 360.0f, true);
+
+    axis.setPosition(0.0f);
+    axis.run(90.0f, 2.0f, 20.0f, 20.0f);
+
+    uint32_t executedSteps = 0;
+    while (axis.getState() != Stepper::State::Stopped && executedSteps < 1000) {
+        generator.advanceStateAfterStep(1);
+        executedSteps++;
+    }
+
+    printTestResult("90 deg slow move executes exactly 800 microsteps", executedSteps == 800);
+    printTestResult("90 deg slow move final angle == 90.0 deg", std::abs(axis.getAngleDeg() - 90.0f) < 0.001f);
+
+    axis.setPosition(0.0f);
+    axis.run(90.0f, 180.0f, 100.0f, 100.0f);
+    executedSteps = 0;
+    while (axis.getState() != Stepper::State::Stopped && executedSteps < 1000) {
+        generator.advanceStateAfterStep(1);
+        executedSteps++;
+    }
+    printTestResult("90 deg trapezoid move executes exactly 800 microsteps", executedSteps == 800);
+    printTestResult("90 deg trapezoid move final angle == 90.0 deg", std::abs(axis.getAngleDeg() - 90.0f) < 0.001f);
 }
 
 void testRotaryAxisHoming() {
@@ -333,18 +321,18 @@ void testRotaryAxisHoming() {
     Stepper::Mock::Pin pinStep(2);
     Stepper::Mock::Pin pinDir(3);
     Stepper::Mock::Driver driver(pinEnable, pinStep, pinDir);
-    Stepper::Generic::Generator generator(driver);
+    Stepper::Mock::Generator generator(driver);
+    generator.init();
+    driver.enable();
     Stepper::Generic::Motor motor(generator, 200, 1.0f);
     Stepper::Generic::RotaryAxis axis(motor, 360.0f, false);
 
-    // 1. Initial State & limits
     axis.setLimits(-180.0f, 180.0f);
     printTestResult("RotaryAxis min angle", axis.getMinAngleDeg() == -180.0f);
     printTestResult("RotaryAxis max angle", axis.getMaxAngleDeg() == 180.0f);
     printTestResult("RotaryAxis initially not homed", !axis.isHomed());
     printTestResult("RotaryAxis initially not homing", !axis.isHoming());
 
-    // 2. Endstops attachment
     Stepper::Mock::Pin pinMin(10);
     Stepper::Mock::Pin pinMax(11);
     Stepper::Mock::Endstop endstopMin(pinMin);
@@ -354,10 +342,7 @@ void testRotaryAxisHoming() {
     printTestResult("No max endstop initially", !axis.hasEndstopMax());
 
     Stepper::Generic::Homing homing;
-
-    // Try homing with no endstop
-    bool homeNoEndstop = homing.homeMin(axis);
-    printTestResult("Homing fails when endstop is not attached", !homeNoEndstop);
+    printTestResult("Homing fails when endstop is not attached", !homing.homeMin(axis));
     printTestResult("Homing state is Failed", homing.getState() == Stepper::Generic::Homing::State::Failed);
 
     axis.setEndstopMin(&endstopMin);
@@ -367,12 +352,10 @@ void testRotaryAxisHoming() {
     printTestResult("getEndstopMin matches", axis.getEndstopMin() == &endstopMin);
     printTestResult("getEndstopMax matches", axis.getEndstopMax() == &endstopMax);
 
-    // 3. Position tracking
     axis.setPosition(90.0f);
     printTestResult("setPosition / getPosition", axis.getPosition() == 90.0f);
     printTestResult("setPosition / getAngleDeg", axis.getAngleDeg() == 90.0f);
 
-    // 4. Two-Stage Homing Simulation (Min Endstop)
     Stepper::Generic::Homing::Config cfg;
     cfg.strategy = Stepper::Generic::Homing::Strategy::Min;
     cfg.fastVelocity = 100.0f;
@@ -384,25 +367,27 @@ void testRotaryAxisHoming() {
     cfg.maxTravelDistance = 360.0f;
     cfg.homePosition = -180.0f;
 
-    bool sawBackingOff = false;
-    int yieldCount = 0;
-    homing.setYieldFunction([&axis, &generator, &homing, &endstopMin, &yieldCount, &sawBackingOff](uint32_t) {
-        yieldCount++;
-        auto state = homing.getState();
-        if (state == Stepper::Generic::Homing::State::FastApproach) {
-            if (yieldCount >= 3) {
-                endstopMin.simulateTrigger(true);
-            }
-        } else if (state == Stepper::Generic::Homing::State::Retracting) {
+    bool sawFinalBackoff = false;
+    int waitTicks = 0;
+    generator.setWaitHook([&](Stepper::State) {
+        waitTicks++;
+        auto hState = homing.getState();
+        if (hState == Stepper::Generic::Homing::State::BackingOff) {
             endstopMin.simulateTrigger(false);
-            axis.stop(); // simulate retract move finishing
-        } else if (state == Stepper::Generic::Homing::State::SlowApproach) {
-            if (yieldCount >= 8) {
+            axis.stop();
+        } else if (hState == Stepper::Generic::Homing::State::FastApproach) {
+            if (waitTicks >= 3) {
                 endstopMin.simulateTrigger(true);
             }
-        } else if (state == Stepper::Generic::Homing::State::BackingOff) {
-            sawBackingOff = true;
-            if (axis.getState() != Stepper::State::Stopped) {
+        } else if (hState == Stepper::Generic::Homing::State::Retracting) {
+            endstopMin.simulateTrigger(false);
+            axis.stop();
+        } else if (hState == Stepper::Generic::Homing::State::SlowApproach) {
+            if (!endstopMin.isTriggered()) {
+                endstopMin.simulateTrigger(true);
+            } else {
+                // Final backoff runs after SlowApproach sets homePosition while state_ remains SlowApproach
+                sawFinalBackoff = true;
                 uint32_t totalSteps = static_cast<uint32_t>(generator.getState().stepsTotal);
                 if (totalSteps > 0) {
                     generator.advanceStateAfterStep(totalSteps);
@@ -415,7 +400,7 @@ void testRotaryAxisHoming() {
 
     bool homeSuccess = homing.home(axis, cfg);
     printTestResult("Two-stage homing Min completes successfully", homeSuccess);
-    printTestResult("Final back-off phase executed", sawBackingOff);
+    printTestResult("Final back-off phase executed", sawFinalBackoff);
     printTestResult("Endstop is released after final back-off", !endstopMin.isTriggered());
     printTestResult("Axis is marked homed", axis.isHomed());
     printTestResult("Axis is not homing after completion", !axis.isHoming());
@@ -427,71 +412,64 @@ void testRotaryAxisHoming() {
     printTestResult("Driver steps reset after homing", driver.getSteps() == 0);
     printTestResult("Axis state is Stopped after homing", axis.getState() == Stepper::State::Stopped);
 
-    // 5. Initial Retract (when endstop is already triggered before starting)
+    // Initial backoff when endstop is already triggered
     endstopMin.simulateTrigger(true);
-    yieldCount = 0;
-    homing.setYieldFunction([&axis, &homing, &endstopMin, &yieldCount](uint32_t) {
-        yieldCount++;
-        auto state = homing.getState();
-        if (state == Stepper::Generic::Homing::State::Retracting) {
-            if (yieldCount >= 2) {
-                endstopMin.simulateTrigger(false);
-                axis.stop(); // simulate retract move finishing
-            }
-        } else if (state == Stepper::Generic::Homing::State::FastApproach) {
-            if (yieldCount >= 5) {
-                endstopMin.simulateTrigger(true);
-            }
-        } else if (state == Stepper::Generic::Homing::State::SlowApproach) {
-            if (yieldCount >= 9) {
-                endstopMin.simulateTrigger(true);
-            }
-        } else if (state == Stepper::Generic::Homing::State::BackingOff) {
+    waitTicks = 0;
+    generator.setWaitHook([&](Stepper::State) {
+        waitTicks++;
+        auto hState = homing.getState();
+        if (hState == Stepper::Generic::Homing::State::BackingOff) {
             endstopMin.simulateTrigger(false);
             axis.stop();
+        } else if (hState == Stepper::Generic::Homing::State::FastApproach) {
+            endstopMin.simulateTrigger(true);
+        } else if (hState == Stepper::Generic::Homing::State::Retracting) {
+            endstopMin.simulateTrigger(false);
+            axis.stop();
+        } else if (hState == Stepper::Generic::Homing::State::SlowApproach) {
+            if (!endstopMin.isTriggered()) {
+                endstopMin.simulateTrigger(true);
+            } else {
+                endstopMin.simulateTrigger(false);
+                axis.stop();
+            }
         }
     });
 
     bool homeFromTriggered = homing.home(axis, cfg);
     printTestResult("Homing with initially triggered endstop succeeds", homeFromTriggered);
-    printTestResult("Axis homed after initial retract", axis.isHomed());
+    printTestResult("Axis homed after initial backoff", axis.isHomed());
 
-    // 6. Max travel distance abort handling (endstop never triggered)
+    // Max travel distance abort handling
     endstopMin.simulateTrigger(false);
-    yieldCount = 0;
-    homing.setYieldFunction([&axis, &yieldCount](uint32_t) {
-        yieldCount++;
-        if (yieldCount >= 5) {
-            // Simulate maxTravelDistance move completing without hitting endstop
-            axis.stop();
-        }
+    generator.setWaitHook([&](Stepper::State) {
+        axis.stop();
     });
     bool homeMaxTravelAbort = homing.home(axis, cfg);
     printTestResult("Homing aborts if maxTravelDistance exceeded without trigger", !homeMaxTravelAbort);
     printTestResult("Homing state is Failed after maxTravelDistance abort", homing.getState() == Stepper::Generic::Homing::State::Failed);
 
-    // 7. Max Endstop Homing
+    // Max Endstop Homing
     cfg.strategy = Stepper::Generic::Homing::Strategy::Max;
     cfg.homePosition = 180.0f;
     cfg.maxTravelDistance = 360.0f;
-    yieldCount = 0;
-    homing.setYieldFunction([&axis, &homing, &endstopMax, &yieldCount](uint32_t) {
-        yieldCount++;
-        auto state = homing.getState();
-        if (state == Stepper::Generic::Homing::State::FastApproach) {
-            if (yieldCount >= 3) {
-                endstopMax.simulateTrigger(true);
-            }
-        } else if (state == Stepper::Generic::Homing::State::Retracting) {
-            endstopMax.simulateTrigger(false);
-            axis.stop(); // simulate retract move finishing
-        } else if (state == Stepper::Generic::Homing::State::SlowApproach) {
-            if (yieldCount >= 7) {
-                endstopMax.simulateTrigger(true);
-            }
-        } else if (state == Stepper::Generic::Homing::State::BackingOff) {
+    generator.setWaitHook([&](Stepper::State) {
+        auto hState = homing.getState();
+        if (hState == Stepper::Generic::Homing::State::BackingOff) {
             endstopMax.simulateTrigger(false);
             axis.stop();
+        } else if (hState == Stepper::Generic::Homing::State::FastApproach) {
+            endstopMax.simulateTrigger(true);
+        } else if (hState == Stepper::Generic::Homing::State::Retracting) {
+            endstopMax.simulateTrigger(false);
+            axis.stop();
+        } else if (hState == Stepper::Generic::Homing::State::SlowApproach) {
+            if (!endstopMax.isTriggered()) {
+                endstopMax.simulateTrigger(true);
+            } else {
+                endstopMax.simulateTrigger(false);
+                axis.stop();
+            }
         }
     });
 
@@ -499,20 +477,18 @@ void testRotaryAxisHoming() {
     printTestResult("Two-stage homing Max completes successfully", homeMaxSuccess);
     printTestResult("Axis position matches homePosition (+180 deg)", axis.getPosition() == 180.0f);
 
-    // 8. Limit protection (immediate stop + directional blocking)
+    // Limit protection
     axis.setPosition(0.0f);
     axis.enableLimitProtectionMin(true);
     axis.enableLimitProtectionMax(true);
     printTestResult("Limit protection min enabled", axis.isLimitProtectionMinEnabled());
     printTestResult("Limit protection max enabled", axis.isLimitProtectionMaxEnabled());
 
-    // Moving toward Min (negative/CW) -> hitting Min stops driver
     axis.run(-10.0f, 50.0f, 100.0f, 100.0f);
     printTestResult("Driver is running before Min limit hit", driver.isRunning());
     endstopMin.simulateTrigger(true);
     printTestResult("Driver stopped when Min limit hit", !driver.isRunning());
 
-    // While Min is triggered: moving further into Min (CW/Backward) is blocked, backing off (CCW/Forward) is allowed
     printTestResult("Move into triggered Min (CW) is blocked", !axis.isDirectionAllowed(Stepper::Direction::Clockwise));
     printTestResult("Move away from triggered Min (CCW) is allowed", axis.isDirectionAllowed(Stepper::Direction::Counterclockwise));
 
@@ -526,61 +502,15 @@ void testRotaryAxisHoming() {
     Stepper::Generic::RotaryAxis::RotaryAxisTask backoffTask = blockedTask;
     backoffTask.angle = 10.0f;
     printTestResult("RotaryAxis::run() allows back-off from triggered Min", axis.run(backoffTask));
-    // Bounce on Min while backing off in CCW must NOT stop the driver
     endstopMin.simulateTrigger(true);
     printTestResult("Min bounce while backing off (CCW) does not stop driver", driver.isRunning());
     endstopMin.simulateTrigger(false);
     axis.stop();
 
-    // While Max is triggered: moving into Max (CCW/Forward) is blocked, backing off (CW/Backward) is allowed
     endstopMax.simulateTrigger(true);
     printTestResult("Move into triggered Max (CCW) is blocked", !axis.isDirectionAllowed(Stepper::Direction::Counterclockwise));
     printTestResult("Move away from triggered Max (CW) is allowed", axis.isDirectionAllowed(Stepper::Direction::Clockwise));
     endstopMax.simulateTrigger(false);
-}
-
-void testStepCountExactness() {
-    std::cout << "\n=== Testing Step Count Exactness (90 deg @ 200 steps/rev x 16 microsteps) ===" << std::endl;
-
-    Stepper::Mock::Pin pinEnable(1);
-    Stepper::Mock::Pin pinStep(2);
-    Stepper::Mock::Pin pinDir(3);
-    Stepper::Mock::Driver driver(pinEnable, pinStep, pinDir, 16);
-    Stepper::Generic::Generator generator(driver);
-    Stepper::Generic::Motor motor(generator, 200, 1.0f);
-    Stepper::Generic::RotaryAxis axis(motor, 360.0f, true);
-
-    // Exact homing back-off parameters: 90 deg at 2 deg/s, acc=20 deg/s^2, dec=20 deg/s^2
-    axis.setPosition(0.0f);
-    axis.run(90.0f, 2.0f, 20.0f, 20.0f);
-
-    uint32_t executedSteps = 0;
-    while (axis.getState() != Stepper::State::Stopped && executedSteps < 1000) {
-        generator.advanceStateAfterStep(1);
-        executedSteps++;
-    }
-
-    auto state = generator.getState();
-    std::cout << "  Profile: [" << state.stepsAcc << "|" << state.stepsConst << "|" << state.stepsDec << "] total=" << state.stepsTotal << std::endl;
-    std::cout << "  Executed steps: " << executedSteps << " | positionSteps: " << state.positionSteps
-              << " | angle: " << std::fixed << std::setprecision(4) << axis.getAngleDeg() << " deg" << std::endl;
-
-    printTestResult("90 deg slow move executes exactly 800 microsteps", executedSteps == 800);
-    printTestResult("90 deg slow move final angle == 90.0 deg", std::abs(axis.getAngleDeg() - 90.0f) < 0.001f);
-
-    // Also verify faster trapezoid move (stepsAcc > 0, stepsDec > 0)
-    axis.setPosition(0.0f);
-    axis.run(90.0f, 180.0f, 100.0f, 100.0f);
-    executedSteps = 0;
-    while (axis.getState() != Stepper::State::Stopped && executedSteps < 1000) {
-        generator.advanceStateAfterStep(1);
-        executedSteps++;
-    }
-    state = generator.getState();
-    std::cout << "  Trapezoid profile: [" << state.stepsAcc << "|" << state.stepsConst << "|" << state.stepsDec << "] total=" << state.stepsTotal << std::endl;
-    std::cout << "  Executed steps: " << executedSteps << " | angle: " << axis.getAngleDeg() << " deg" << std::endl;
-    printTestResult("90 deg trapezoid move executes exactly 800 microsteps", executedSteps == 800);
-    printTestResult("90 deg trapezoid move final angle == 90.0 deg", std::abs(axis.getAngleDeg() - 90.0f) < 0.001f);
 }
 
 void testDualEndstopHoming() {
@@ -590,7 +520,9 @@ void testDualEndstopHoming() {
     Stepper::Mock::Pin pinStep(2);
     Stepper::Mock::Pin pinDir(3);
     Stepper::Mock::Driver driver(pinEnable, pinStep, pinDir, 1);
-    Stepper::Generic::Generator generator(driver);
+    Stepper::Mock::Generator generator(driver);
+    generator.init();
+    driver.enable();
     Stepper::Generic::Motor motor(generator, 200, 1.0f);
     Stepper::Generic::RotaryAxis axis(motor, 360.0f, false);
 
@@ -607,51 +539,41 @@ void testDualEndstopHoming() {
     cfg.acceleration = 200.0f;
     cfg.deceleration = 200.0f;
     cfg.retractDistance = 10.0f;
-    cfg.backoffDistance = 5.0f; // 2 steps = 3.6 deg at 200 steps/rev
+    cfg.backoffDistance = 5.0f;
     cfg.maxTravelDistance = 360.0f;
     cfg.homePosition = 0.0f;
 
-    // 1. Fails when no endstops attached
     printTestResult("MinThenMax fails with 0 endstops", !homing.homeMinMax(axis, cfg));
     printTestResult("State is Failed with 0 endstops", homing.getState() == Stepper::Generic::Homing::State::Failed);
 
-    // 2. Fails when only Min endstop attached
     axis.setEndstopMin(&endstopMin);
     printTestResult("MinThenMax fails with only Min endstop", !homing.homeMinMax(axis, cfg));
     printTestResult("State is Failed with only 1 endstop", homing.getState() == Stepper::Generic::Homing::State::Failed);
 
-    // 3. Succeeds with both Min and Max endstops attached
     axis.setEndstopMax(&endstopMax);
 
-    // Track whether we are homing Min (phaseGroup=0) or Max (phaseGroup=1)
     int slowLatchCount = 0;
-    int yieldCount = 0;
-    homing.setYieldFunction([&](uint32_t) {
-        yieldCount++;
-        auto state = homing.getState();
+    generator.setWaitHook([&](Stepper::State) {
+        auto hState = homing.getState();
         bool homingMax = (slowLatchCount >= 1);
         auto& activeEndstop = homingMax ? endstopMax : endstopMin;
 
-        if (state == Stepper::Generic::Homing::State::FastApproach) {
+        if (hState == Stepper::Generic::Homing::State::BackingOff) {
+            activeEndstop.simulateTrigger(false);
+            axis.stop();
+        } else if (hState == Stepper::Generic::Homing::State::FastApproach) {
             if (homingMax && axis.getState() != Stepper::State::Stopped) {
-                // Simulate traveling 100 steps (+180.0 deg) from Min to Max
-                generator.advanceStateAfterStep(100);
-                activeEndstop.simulateTrigger(true);
-            } else if (!homingMax && yieldCount >= 2) {
-                activeEndstop.simulateTrigger(true);
+                generator.advanceStateAfterStep(100); // +180.0 deg
             }
-        } else if (state == Stepper::Generic::Homing::State::Retracting) {
-            if (axis.getState() != Stepper::State::Stopped) {
-                activeEndstop.simulateTrigger(false);
-                axis.stop();
-            }
-        } else if (state == Stepper::Generic::Homing::State::SlowApproach) {
-            if (axis.getState() != Stepper::State::Stopped) {
+            activeEndstop.simulateTrigger(true);
+        } else if (hState == Stepper::Generic::Homing::State::Retracting) {
+            activeEndstop.simulateTrigger(false);
+            axis.stop();
+        } else if (hState == Stepper::Generic::Homing::State::SlowApproach) {
+            if (!activeEndstop.isTriggered()) {
                 activeEndstop.simulateTrigger(true);
                 slowLatchCount++;
-            }
-        } else if (state == Stepper::Generic::Homing::State::BackingOff) {
-            if (axis.getState() != Stepper::State::Stopped) {
+            } else {
                 uint32_t totalSteps = static_cast<uint32_t>(generator.getState().stepsTotal);
                 if (totalSteps > 0) {
                     generator.advanceStateAfterStep(totalSteps);
@@ -678,11 +600,12 @@ void testLinearAxis() {
     Stepper::Mock::Pin pinEnable(1);
     Stepper::Mock::Pin pinStep(2);
     Stepper::Mock::Pin pinDir(3);
-    // 200 steps/rev, 1 microstep, 8.0 mm/rev leadscrew -> 25 steps/mm
     Stepper::Mock::Driver driver(pinEnable, pinStep, pinDir, 1);
-    Stepper::Generic::Generator generator(driver);
+    Stepper::Mock::Generator generator(driver);
+    generator.init();
+    driver.enable();
     Stepper::Generic::Motor motor(generator, 200, 1.0f);
-    Stepper::Generic::LinearAxis axis(motor, 8.0f);
+    Stepper::Generic::LinearAxis axis(motor, 8.0f); // 25 steps/mm
     axis.setLimits(0.0f, 200.0f);
     axis.setHomed(true);
 
@@ -690,7 +613,6 @@ void testLinearAxis() {
     printTestResult("LinearAxis min limit == 0.0 mm", axis.getMinPositionMm() == 0.0f);
     printTestResult("LinearAxis max limit == 200.0 mm", axis.getMaxPositionMm() == 200.0f);
 
-    // Move 40 mm forward (1000 steps)
     axis.setPositionMm(10.0f);
     printTestResult("LinearAxis setPositionMm / getPositionMm", std::abs(axis.getPositionMm() - 10.0f) < 0.01f);
 
@@ -703,18 +625,15 @@ void testLinearAxis() {
     printTestResult("LinearAxis 40 mm move executes 1000 steps", steps == 1000);
     printTestResult("LinearAxis position after 40 mm forward == 50.0 mm", std::abs(axis.getPositionMm() - 50.0f) < 0.01f);
 
-    // Soft limit clamping: try moving 200 mm forward from 50 mm (should clamp to 150 mm -> 200 mm max)
     axis.run(200.0f, 80.0f, 200.0f, 200.0f);
     printTestResult("LinearAxis clamps move exceeding maxLimit (150 mm = 3750 steps)", generator.getState().stepsTotal == 3750);
     axis.stop();
 
-    // Soft limit clamping in negative direction: try moving -100 mm from 50 mm (should clamp to -50 mm -> 0 mm min)
     axis.run(-100.0f, 80.0f, 200.0f, 200.0f);
     printTestResult("LinearAxis clamps move below minLimit (-50 mm = 1250 steps, Backward)",
                     generator.getState().stepsTotal == 1250 && generator.getState().targetDirection == Stepper::Direction::Backward);
     axis.stop();
 
-    // Limit protection with Forward / Backward
     Stepper::Mock::Pin pinMin(10);
     Stepper::Mock::Pin pinMax(11);
     Stepper::Mock::Endstop endstopMin(pinMin);
@@ -726,7 +645,6 @@ void testLinearAxis() {
     printTestResult("LinearAxis allows Forward away from triggered Min", axis.isDirectionAllowed(Stepper::Direction::Forward));
     endstopMin.simulateTrigger(false);
 
-    // Dual-endstop homing works identically on LinearAxis
     Stepper::Generic::Homing homing;
     Stepper::Generic::Homing::Config cfg;
     cfg.strategy = Stepper::Generic::Homing::Strategy::MinThenMax;
@@ -740,33 +658,30 @@ void testLinearAxis() {
     cfg.homePosition = 0.0f;
 
     int slowLatches = 0;
-    int yields = 0;
-    homing.setYieldFunction([&](uint32_t) {
-        yields++;
-        auto state = homing.getState();
+    generator.setWaitHook([&](Stepper::State) {
+        auto hState = homing.getState();
         bool homingMax = (slowLatches >= 1);
         auto& active = homingMax ? endstopMax : endstopMin;
-        if (state == Stepper::Generic::Homing::State::FastApproach) {
+        if (hState == Stepper::Generic::Homing::State::BackingOff) {
+            active.simulateTrigger(false);
+            axis.stop();
+        } else if (hState == Stepper::Generic::Homing::State::FastApproach) {
             if (homingMax && axis.getState() != Stepper::State::Stopped) {
                 generator.advanceStateAfterStep(2500); // 100.0 mm
-                active.simulateTrigger(true);
-            } else if (!homingMax && yields >= 2) {
-                active.simulateTrigger(true);
             }
-        } else if (state == Stepper::Generic::Homing::State::Retracting) {
-            if (axis.getState() != Stepper::State::Stopped) {
-                active.simulateTrigger(false);
-                axis.stop();
-            }
-        } else if (state == Stepper::Generic::Homing::State::SlowApproach) {
-            if (axis.getState() != Stepper::State::Stopped) {
+            active.simulateTrigger(true);
+        } else if (hState == Stepper::Generic::Homing::State::Retracting) {
+            active.simulateTrigger(false);
+            axis.stop();
+        } else if (hState == Stepper::Generic::Homing::State::SlowApproach) {
+            if (!active.isTriggered()) {
                 active.simulateTrigger(true);
                 slowLatches++;
-            }
-        } else if (state == Stepper::Generic::Homing::State::BackingOff) {
-            if (axis.getState() != Stepper::State::Stopped) {
+            } else {
                 uint32_t total = static_cast<uint32_t>(generator.getState().stepsTotal);
-                if (total > 0) generator.advanceStateAfterStep(total);
+                if (total > 0) {
+                    generator.advanceStateAfterStep(total);
+                }
                 active.simulateTrigger(false);
                 axis.stop();
             }
@@ -779,25 +694,208 @@ void testLinearAxis() {
     printTestResult("LinearAxis backed off to 98.0 mm", std::abs(axis.getPositionMm() - 98.0f) < 0.01f);
 }
 
+void testStoppingModes() {
+    std::cout << "\n=== Testing Stopping Modes & EmergencyStop Latch ===" << std::endl;
+
+    Stepper::Mock::Pin pin(0);
+    Stepper::Mock::Driver driver(pin, pin, pin, 1);
+    Stepper::Mock::Generator generator(driver);
+    generator.init();
+    Stepper::Generic::Motor motor(generator, 200, 1.0f);
+    Stepper::Generic::LinearAxis axis(motor, 5.0f);
+
+    Stepper::Generic::LinearAxis::LinearAxisTask relTask;
+    relTask.moveRelative = true;
+    relTask.position = 25.0f;
+    relTask.velocity = 10.0f;
+    relTask.acceleration = 20.0f;
+    relTask.deceleration = 20.0f;
+
+    Stepper::Generic::LinearAxis::LinearAxisTask absTask = relTask;
+    absTask.moveRelative = false;
+
+    // 1. Disabled driver blocks run()
+    printTestResult("Disabled driver rejects Axis::run()", !axis.run(relTask) && !driver.isRunning());
+
+    driver.enable();
+    axis.setHomed(true);
+    axis.setLimits(-100.0f, 100.0f);
+
+    // 2. pause() + resume() from Paused
+    axis.run(relTask);
+    for (int i = 0; i < 60 && driver.isRunning(); ++i) {
+        driver.stepSingleBatch();
+    }
+    bool pausedOk = axis.pause() && driver.stepLoop() && axis.isPaused() && !driver.isRunning();
+    printTestResult("pause() decelerates to State::Paused", pausedOk);
+    bool resumedOk = axis.resume() && driver.isRunning() && driver.stepLoop() &&
+                     axis.getState() == Stepper::State::Stopped &&
+                     std::abs(axis.getPositionMm() - 25.0f) < 0.03f;
+    printTestResult("resume() completes exact 25.0 mm move", resumedOk);
+
+    // 3. resume() mid-deceleration into pause
+    axis.setPositionMm(0.0f);
+    axis.run(relTask);
+    for (int i = 0; i < 50; ++i) {
+        driver.stepSingleBatch();
+    }
+    bool midPauseOk = axis.pause() && driver.stepSingleBatch() &&
+                      axis.getState() == Stepper::State::Decelerating &&
+                      axis.resume() && driver.stepLoop() &&
+                      std::abs(axis.getPositionMm() - 25.0f) < 0.03f;
+    printTestResult("resume() during pause deceleration finishes move", midPauseOk);
+
+    // 4. fastStop()
+    axis.setFastStopDeceleration(100.0f);
+    axis.run(relTask);
+    for (int i = 0; i < 50; ++i) {
+        driver.stepSingleBatch();
+    }
+    axis.fastStop();
+    bool fastStopOk = driver.isRunning() && driver.stepLoop() &&
+                      axis.getState() == Stepper::State::Stopped &&
+                      axis.isHomed() && !axis.resume();
+    printTestResult("fastStop() decelerates to Stopped, keeps isHomed(), not resumable", fastStopOk);
+
+    // 5. emergencyStop(true) latch & clearEmergencyStop(false/true)
+    axis.run(relTask);
+    driver.stepSingleBatch();
+    axis.emergencyStop(true);
+    bool estopLatched = axis.isEmergencyStopped() && !driver.isRunning() && !driver.isEnabled() && !axis.isHomed();
+    axis.stop(); // must not clear E-stop
+    printTestResult("emergencyStop(true) latches EmergencyStop and disables driver", estopLatched && axis.isEmergencyStopped());
+
+    driver.enable();
+    printTestResult("Latched EmergencyStop blocks relative run() even if driver enabled", !axis.run(relTask));
+
+    driver.disable();
+    bool clearNoEnable = axis.clearEmergencyStop(false) && !axis.isEmergencyStopped() &&
+                         axis.getState() == Stepper::State::Stopped && !driver.isEnabled() && !axis.run(relTask);
+    printTestResult("clearEmergencyStop(false) clears latch, keeps driver disabled", clearNoEnable);
+
+    driver.enable();
+    axis.run(relTask);
+    driver.stepSingleBatch();
+    axis.emergencyStop(true);
+    bool clearWithEnable = axis.clearEmergencyStop(true) && driver.isEnabled() &&
+                           !axis.isHomed() && !axis.run(absTask) && axis.run(relTask);
+    printTestResult("clearEmergencyStop(true) re-enables driver, keeps abs blocked until homed", clearWithEnable);
+}
+
+void testStopController() {
+    std::cout << "\n=== Testing StopController (Axes & Standalone Motor) ===" << std::endl;
+
+    Stepper::Mock::Pin p0(0), p1(1), p2(2);
+    Stepper::Mock::Driver d0(p0, p0, p0), d1(p1, p1, p1), d2(p2, p2, p2);
+    Stepper::Mock::Generator g0(d0), g1(d1), g2(d2);
+    g0.init();
+    g1.init();
+    g2.init();
+    d0.enable();
+    d1.enable();
+    d2.enable();
+
+    Stepper::Generic::Motor m0(g0, 200, 1.0f), m1(g1, 200, 1.0f), standaloneMotor(g2, 200, 1.0f);
+    Stepper::Generic::LinearAxis linearAxis(m0, 5.0f);
+    Stepper::Generic::RotaryAxis rotaryAxis(m1, 360.0f, false);
+    linearAxis.setHomed(true);
+    linearAxis.setLimits(-100.0f, 100.0f);
+    rotaryAxis.setHomed(true);
+    rotaryAxis.setLimits(-360.0f, 360.0f);
+
+    Stepper::Generic::StopController controller;
+    bool regOk = !controller.registerTarget(-1, linearAxis) &&
+                 controller.registerTarget(0, linearAxis) &&
+                 controller.registerTarget(1, rotaryAxis) &&
+                 controller.registerTarget(2, standaloneMotor) &&
+                 !controller.registerTarget(1, standaloneMotor) &&
+                 controller.targetCount() == 3;
+    printTestResult("StopController validates IDs and rejects duplicates", regOk);
+
+    linearAxis.run(25.0f, 10.0f, 20.0f, 20.0f);
+    rotaryAxis.run(180.0f, 90.0f, 180.0f, 180.0f);
+    standaloneMotor.run(5.0f, 2.0f, 4.0f, 4.0f);
+    for (int i = 0; i < 40; ++i) {
+        d0.stepSingleBatch();
+        d1.stepSingleBatch();
+        d2.stepSingleBatch();
+    }
+
+    bool targetedPause = controller.pause(2) && d2.stepLoop() &&
+                         standaloneMotor.isPaused() && !linearAxis.isPaused() && !rotaryAxis.isPaused() &&
+                         d0.isRunning() && d1.isRunning();
+    printTestResult("Targeted pause(motorId) pauses only standalone Motor", targetedPause);
+
+    bool targetedResume = controller.resume(2) && d2.stepLoop() &&
+                          standaloneMotor.getState() == Stepper::State::Stopped;
+    printTestResult("Targeted resume(motorId) finishes Motor move", targetedResume);
+
+    controller.pauseAll();
+    bool pauseAllOk = d0.stepLoop() && d1.stepLoop() && linearAxis.isPaused() && rotaryAxis.isPaused();
+    controller.resumeAll();
+    bool resumeAllOk = d0.isRunning() && d1.isRunning();
+    printTestResult("pauseAll() and resumeAll() affect all targets", pauseAllOk && resumeAllOk);
+
+    controller.emergencyStopAll(true);
+    bool estopAllOk = linearAxis.isEmergencyStopped() && rotaryAxis.isEmergencyStopped() &&
+                      standaloneMotor.isEmergencyStopped() && !d0.isEnabled() && !d1.isEnabled() && !d2.isEnabled();
+    controller.clearEmergencyStopAll(true);
+    bool clearAllOk = !linearAxis.isEmergencyStopped() && !rotaryAxis.isEmergencyStopped() &&
+                      !standaloneMotor.isEmergencyStopped() && d0.isEnabled() && d1.isEnabled() && d2.isEnabled();
+    printTestResult("emergencyStopAll(true) + clearEmergencyStopAll(true)", estopAllOk && clearAllOk);
+
+    bool unregOk = controller.unregisterTarget(0) && !controller.unregisterTarget(0) &&
+                   controller.unregisterTarget(rotaryAxis) && controller.unregisterTarget(2) &&
+                   controller.targetCount() == 0;
+    printTestResult("unregisterTarget by ID and by reference", unregOk);
+}
+
+void testDeferredInitAndOptionalEnablePin() {
+    std::cout << "\n=== Testing Deferred init() & Optional/Shared enablePin ===" << std::endl;
+
+    Stepper::Mock::Pin stepPin(1), dirPin(2);
+    Stepper::Mock::Driver drvNullEn(nullptr, stepPin, dirPin, 1);
+    Stepper::Mock::Generator gen(drvNullEn);
+
+    printTestResult("Generator ctor does not call driver.init()", drvNullEn.initCalls_ == 0);
+    drvNullEn.initShouldSucceed_ = false;
+    bool failProp = !gen.init() && drvNullEn.initCalls_ == 1;
+    drvNullEn.initShouldSucceed_ = true;
+    bool passProp = gen.init() && drvNullEn.initCalls_ == 2;
+    printTestResult("Generator::init() propagates driver.init() result", failProp && passProp);
+
+    bool nullEnOk = !drvNullEn.hasEnablePin() && drvNullEn.isEnabled() &&
+                    gen.run(100, 100.0f, 100.0f, 100.0f, Stepper::Direction::Positive);
+    printTestResult("Driver with nullptr enablePin starts enabled and runs", nullEnOk);
+
+    Stepper::Mock::Pin sharedEn(10), s1(11), d1Pin(12), s2(13), d2Pin(14);
+    Stepper::Mock::Driver sharedA(&sharedEn, s1, d1Pin, 1);
+    Stepper::Mock::Driver sharedB(&sharedEn, s2, d2Pin, 1);
+    sharedA.enable();
+    bool sharedEnOn = sharedA.isEnabled() && sharedB.isEnabled() && sharedEn.isEnabled();
+    sharedB.disable();
+    bool sharedEnOff = !sharedA.isEnabled() && !sharedB.isEnabled() && !sharedEn.isEnabled();
+    printTestResult("Shared Generic::Pin* enablePin toggles both drivers", sharedEnOn && sharedEnOff);
+}
+
 int main() {
     std::cout << "==========================================" << std::endl;
-    std::cout << "   ESP32 Modular Stepper Pure C++ Sandbox  " << std::endl;
+    std::cout << "   ESP32 Modular Stepper Pure C++ Sandbox " << std::endl;
     std::cout << "==========================================" << std::endl;
 
+    testEnumHelpers();
+    testFixedPointSquareroot();
+    testStepperGeneratorKinematics();
     testStepperEndstop();
-    testRotaryAxisHoming();
     testStepCountExactness();
+    testRotaryAxisHoming();
     testDualEndstopHoming();
     testLinearAxis();
-    //testEnumHelpers();
-    //testStepperGenerator();
-    testStepperGeneratorZeroAcc();
-    testStepperGeneratorZeroDec();
-    testStepperGeneratorZeroAccDec();
-    //testBatchKinematics();
-    //testFixedPointSquareroot();
-    //testStepProfileGeneration();
+    testStoppingModes();
+    testStopController();
+    testDeferredInitAndOptionalEnablePin();
 
-    std::cout << "\nAll sandbox tests completed successfully!\n" << std::endl;
-    return 0;
+    std::cout << "\n------------------------------------------" << std::endl;
+    std::cout << "Passed: " << g_passedTests << " | Failed: " << g_failedTests << std::endl;
+    return (g_failedTests == 0) ? 0 : 1;
 }

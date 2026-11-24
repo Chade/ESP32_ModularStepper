@@ -9,14 +9,18 @@ namespace Generic {
 Generator::Generator(Driver& driver)
         : driver_(driver) {
     driver_.registerCallbackOnStepDone(callbackOnStepDone, this);
-    driver_.init();
 }
 
 Generator::~Generator() {
 
 }
 
+bool Generator::init() {
+    return driver_.init();
+}
+
 bool Generator::run(const GeneratorTask& task) {
+    std::lock_guard<std::recursive_mutex> lock(stateMutex_);
     if (state_.currentState == State::EmergencyStop) {
         LOG_ERROR("Cannot start generator: emergency stop is latched");
         return false;
@@ -99,6 +103,7 @@ bool Generator::run(uint64_t steps,
 }
 
 void Generator::stop() {
+    std::lock_guard<std::recursive_mutex> lock(stateMutex_);
     pauseRequested_ = false;
     fastStopRequested_ = false;
     hasPausedTask_ = false;
@@ -112,6 +117,7 @@ void Generator::stop() {
 }
 
 bool Generator::pause() {
+    std::lock_guard<std::recursive_mutex> lock(stateMutex_);
     if (state_.currentState == State::Paused) {
         return true;
     }
@@ -150,6 +156,7 @@ bool Generator::pause() {
 }
 
 bool Generator::resume() {
+    std::lock_guard<std::recursive_mutex> lock(stateMutex_);
     if (pauseRequested_ && state_.currentVelocity > 0) {
         GeneratorTask resumeTask = activeTask_;
         if (state_.stepsTotal > 0) {
@@ -175,19 +182,23 @@ bool Generator::resume() {
 }
 
 void Generator::setFastStopDeceleration(float deceleration) {
+    std::lock_guard<std::recursive_mutex> lock(stateMutex_);
     fastStopDeceleration_ = (deceleration > 0.0f) ? UQ20x12(deceleration) : UQ20x12(0.0);
 }
 
 float Generator::getFastStopDeceleration() const {
+    std::lock_guard<std::recursive_mutex> lock(stateMutex_);
     return static_cast<float>(fastStopDeceleration_);
 }
 
 void Generator::fastStop() {
+    std::lock_guard<std::recursive_mutex> lock(stateMutex_);
     UQ20x12 decel = (fastStopDeceleration_ > 0) ? fastStopDeceleration_ : state_.deceleration;
     fastStop(static_cast<float>(decel));
 }
 
 void Generator::fastStop(float deceleration) {
+    std::lock_guard<std::recursive_mutex> lock(stateMutex_);
     pauseRequested_ = false;
     hasPausedTask_ = false;
 
@@ -212,6 +223,7 @@ void Generator::fastStop(float deceleration) {
 }
 
 void Generator::emergencyStop(bool disableDriver) {
+    std::lock_guard<std::recursive_mutex> lock(stateMutex_);
     pauseRequested_ = false;
     fastStopRequested_ = false;
     hasPausedTask_ = false;
@@ -226,6 +238,7 @@ void Generator::emergencyStop(bool disableDriver) {
 }
 
 bool Generator::clearEmergencyStop(bool enableDriver) {
+    std::lock_guard<std::recursive_mutex> lock(stateMutex_);
     if (state_.currentState != State::EmergencyStop) {
         return false;
     }
@@ -777,6 +790,7 @@ uint32_t Generator::computeStepBatchSize(const GeneratorState& state) const {
 
 void Generator::callbackOnStepDone(uint32_t stepsDone, uint32_t& stepsToDo, float& pulsePeriod_us, float& pulsePeriodIncrement_us, void* user_ctx) {
     Generator* self = static_cast<Generator*>(user_ctx);
+    std::lock_guard<std::recursive_mutex> lock(self->stateMutex_);
 
     // Ignore late ISR notifications after an explicit stop, pause, or emergency stop
     if (self->state_.currentState == State::Paused ||

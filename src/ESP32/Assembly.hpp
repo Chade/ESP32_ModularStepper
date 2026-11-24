@@ -22,7 +22,8 @@ namespace ESP32 {
 class MotorAssembly {
 public:
     static std::unique_ptr<MotorAssembly> create(const Generic::MotorConfig& config,
-                                                 Generic::StopController* stopController = nullptr);
+                                                 Generic::StopController* stopController = nullptr,
+                                                 Generic::Pin* sharedEnablePin = nullptr);
 
     ~MotorAssembly();
 
@@ -40,8 +41,8 @@ public:
     Generic::Driver& driver() { return *driver_; }
     const Generic::Driver& driver() const { return *driver_; }
 
-    Generic::Pin& pinEnable() { return *pinEnable_; }
-    const Generic::Pin& pinEnable() const { return *pinEnable_; }
+    Generic::Pin* pinEnable() { return enablePinPtr_; }
+    const Generic::Pin* pinEnable() const { return enablePinPtr_; }
 
     Generic::Pin& pinStep() { return *pinStep_; }
     const Generic::Pin& pinStep() const { return *pinStep_; }
@@ -56,6 +57,7 @@ private:
     Generic::StopController* stopController_ {nullptr};
     int16_t registeredId_ {-1};
     std::unique_ptr<Generic::Pin> pinEnable_;
+    Generic::Pin* enablePinPtr_ {nullptr};
     std::unique_ptr<Generic::Pin> pinStep_;
     std::unique_ptr<Generic::Pin> pinDirection_;
     std::unique_ptr<Generic::Driver> driver_;
@@ -118,7 +120,8 @@ protected:
 class LinearAxisAssembly : public AxisAssembly {
 public:
     static std::unique_ptr<LinearAxisAssembly> create(const Generic::LinearAxisConfig& config,
-                                                      Generic::StopController* stopController = nullptr);
+                                                      Generic::StopController* stopController = nullptr,
+                                                      Generic::Pin* sharedEnablePin = nullptr);
     static std::unique_ptr<LinearAxisAssembly> create(std::unique_ptr<MotorAssembly> motorAssembly,
                                                       const Generic::LinearAxisConfig& config,
                                                       Generic::StopController* stopController = nullptr);
@@ -134,7 +137,8 @@ private:
 class RotaryAxisAssembly : public AxisAssembly {
 public:
     static std::unique_ptr<RotaryAxisAssembly> create(const Generic::RotaryAxisConfig& config,
-                                                      Generic::StopController* stopController = nullptr);
+                                                      Generic::StopController* stopController = nullptr,
+                                                      Generic::Pin* sharedEnablePin = nullptr);
     static std::unique_ptr<RotaryAxisAssembly> create(std::unique_ptr<MotorAssembly> motorAssembly,
                                                       const Generic::RotaryAxisConfig& config,
                                                       Generic::StopController* stopController = nullptr);

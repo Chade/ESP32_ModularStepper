@@ -22,11 +22,13 @@ struct DriverConfig {
 
     Type type {Type::MCPWM};
 
+    bool hasEnablePin {true};
     PinConfig enablePin {0, false, Pin::IoMode::Output, Pin::PullMode::Floating};
     PinConfig stepPin {0, false, Pin::IoMode::Output, Pin::PullMode::Floating};
     PinConfig directionPin {0, false, Pin::IoMode::Output, Pin::PullMode::Floating};
 
     uint8_t microsteps {1};
+    int8_t mcpwmGroupId {-1}; // -1 = auto-select first available MCPWM group
 
     float minPulseWidthHigh_us {1.0f};
     float minPulseWidthLow_us {1.0f};

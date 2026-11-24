@@ -2,6 +2,7 @@
 #define STEPPER_GENERATOR_HPP
 
 #include <FixedPoints.h>
+#include <mutex>
 #include <stdint.h>
 
 #include "Driver.hpp"
@@ -18,6 +19,8 @@ public:
     Generator() = delete;
     explicit Generator(Driver& driver);
     virtual ~Generator();
+
+    virtual bool init();
 
     struct GeneratorTask {
         uint32_t steps = 0;
@@ -41,6 +44,7 @@ public:
     bool pause();
     bool resume();
     bool isPaused() const {
+        std::lock_guard<std::recursive_mutex> lock(stateMutex_);
         return state_.currentState == State::Paused;
     }
 
@@ -52,6 +56,7 @@ public:
     void emergencyStop(bool disableDriver = false);
     bool clearEmergencyStop(bool enableDriver = false);
     bool isEmergencyStopped() const {
+        std::lock_guard<std::recursive_mutex> lock(stateMutex_);
         return state_.currentState == State::EmergencyStop;
     }
 
@@ -90,10 +95,12 @@ public:
     };
 
     GeneratorState getState() const {
+        std::lock_guard<std::recursive_mutex> lock(stateMutex_);
         return state_;
     };
 
     void resetState(bool resetPosition = true) {
+        std::lock_guard<std::recursive_mutex> lock(stateMutex_);
         state_.currentState = State::Stopped; // movement state
         state_.previousState = State::Undefined; // movement state
 
@@ -130,18 +137,22 @@ public:
     virtual State waitForState(State state, uint32_t timeout_ms = UINT32_MAX) const = 0;
 
     float getVelocity() const {
+        std::lock_guard<std::recursive_mutex> lock(stateMutex_);
         return static_cast<float>(state_.currentVelocity);
     };
 
     uint64_t getStepsDone() const {
+        std::lock_guard<std::recursive_mutex> lock(stateMutex_);
         return state_.stepsDone;
     };
 
     int64_t getPositionSteps() const {
+        std::lock_guard<std::recursive_mutex> lock(stateMutex_);
         return state_.stepsPosition;
     };
 
     void setPositionSteps(int64_t steps) {
+        std::lock_guard<std::recursive_mutex> lock(stateMutex_);
         state_.stepsPosition = steps;
     };
 
@@ -154,10 +165,12 @@ public:
     };
 
     void initializeStateBeforeStep(const GeneratorTask& task) {
+        std::lock_guard<std::recursive_mutex> lock(stateMutex_);
         initializeStateBeforeStep(task, state_);
     };
 
     void advanceStateAfterStep(uint32_t steps) {
+        std::lock_guard<std::recursive_mutex> lock(stateMutex_);
         advanceStateAfterStep(steps, state_);
     };
     
@@ -180,6 +193,7 @@ private:
 
     Driver& driver_;
 
+    mutable std::recursive_mutex stateMutex_;
     GeneratorTask activeTask_;
     GeneratorTask pausedTask_;
     volatile bool pauseRequested_ {false};

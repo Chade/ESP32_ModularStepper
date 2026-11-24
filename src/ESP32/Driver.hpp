@@ -12,11 +12,12 @@ namespace ESP32 {
     class Driver : public Generic::Driver {
     public:
         Driver() = delete;
+        Driver(Generic::Pin* enablePin, Generic::Pin& stepPin, Generic::Pin& directionPin, uint8_t microsteps = 1);
         Driver(Generic::Pin& enablePin, Generic::Pin& stepPin, Generic::Pin& directionPin, uint8_t microsteps = 1);
 
         ~Driver() override;
 
-        void init() override = 0;
+        bool init() override;
         void start() override = 0;
         void stop() override = 0;
         bool isRunning() override = 0;

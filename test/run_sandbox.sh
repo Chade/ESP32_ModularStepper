@@ -14,8 +14,9 @@ STUBS_INC="$SCRIPT_DIR/sandbox_stubs"
 TARGET="sandbox_test"
 
 echo "[BUILD] Compiling pure C++ sandbox executable ($TARGET)..."
-g++ -std=c++17 -Wall -Wextra -Wno-unused-parameter -Wno-format \
+g++ -std=c++17 -pthread -Wall -Wextra -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-format \
     -DIRAM_ATTR= \
+    -DLOG_LOCAL_LEVEL=0 \
     -I"$STUBS_INC" \
     -I"$FIXED_POINTS_INC" \
     -I"$PROJECT_DIR" \
@@ -28,9 +29,9 @@ g++ -std=c++17 -Wall -Wextra -Wno-unused-parameter -Wno-format \
     "$PROJECT_DIR/src/Generic/Axis_Rotary.cpp" \
     "$PROJECT_DIR/src/Generic/Axis_Linear.cpp" \
     "$PROJECT_DIR/src/Generic/Homing.cpp" \
+    "$PROJECT_DIR/src/Generic/StopController.cpp" \
     sandbox_test.cpp -o "$TARGET"
 
 echo "[EXEC] Running $TARGET..."
 echo "--------------------------------------------------"
 ./"$TARGET"
-

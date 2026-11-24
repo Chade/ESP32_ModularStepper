@@ -14,16 +14,21 @@ namespace MCPWM {
     class Driver : public ESP32::Driver {
     public:
         Driver() = delete;
-        Driver(Generic::Pin& enablePin, Generic::Pin& stepPin, Generic::Pin& directionPin, uint8_t microsteps = 1);
+        Driver(Generic::Pin* enablePin, Generic::Pin& stepPin, Generic::Pin& directionPin, uint8_t microsteps = 1, int groupId = -1);
+        Driver(Generic::Pin& enablePin, Generic::Pin& stepPin, Generic::Pin& directionPin, uint8_t microsteps = 1, int groupId = -1);
+        ~Driver() override;
 
-        void init() override;
+        bool init() override;
         void start() override;
         void stop() override;
         bool isRunning() override;
         void startOnce();
         void startSync();
 
+        int getGroupId() const { return activeGroupId_; }
+
     private:
+        void deinit();
         inline uint32_t timerTicksFromUs(float timeUs) {
             constexpr uint8_t scaleFixed = 12;
             uint32_t timeFixed = static_cast<uint32_t>(timeUs * (1 << scaleFixed));  
@@ -50,6 +55,9 @@ namespace MCPWM {
         const uint8_t timerScaleShift_;
         const uint32_t timerResolutionHz_;
         
+        int requestedGroupId_ {-1};
+        int activeGroupId_ {-1};
+        bool timerEnabled_ {false};
         bool mcpwmTimerRunning_ {false};
 
         mcpwm_timer_handle_t stepTimerHandle_ {nullptr};
