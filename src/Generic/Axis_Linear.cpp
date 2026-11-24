@@ -87,5 +87,17 @@ void LinearAxis::run(float distance_mm, float targetVelocity, float acceleration
     run(task);
 }
 
+void LinearAxis::fastStop(float deceleration_mm_s2) {
+    motor_.fastStop(mmToRevolutions(fabs(deceleration_mm_s2)));
+}
+
+void LinearAxis::setFastStopDeceleration(float deceleration_mm_s2) {
+    motor_.setFastStopDeceleration(mmToRevolutions(fabs(deceleration_mm_s2)));
+}
+
+float LinearAxis::getFastStopDeceleration() const {
+    return revolutionsToMm(motor_.getFastStopDeceleration());
+}
+
 } // namespace Generic
 } // namespace Stepper

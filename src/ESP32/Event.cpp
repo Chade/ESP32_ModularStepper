@@ -1,7 +1,8 @@
 #include "Event.hpp"
-#include "Helper.hpp"
+#include "../Generic/Helper.hpp"
 
 namespace Stepper {
+namespace ESP32 {
 
 ESP_EVENT_DEFINE_BASE(TaskEventBaseId);
 
@@ -133,4 +134,5 @@ esp_err_t stopEventLoopPostISR(StopEventId eventId, const void *eventData, size_
     return esp_event_isr_post_to(stopEventLoopHandle, StopEventBaseId, cast_enum_to_base(eventId), eventData, eventDataSize, taskUnblocked);
 }
 
+} // namespace ESP32
 } // namespace Stepper

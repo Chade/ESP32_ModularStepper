@@ -83,5 +83,17 @@ void RotaryAxis::run(float angle_deg, float targetVelocity, float acceleration, 
     run(task);
 }
 
+void RotaryAxis::fastStop(float deceleration_deg_s2) {
+    motor_.fastStop(angleDegToRevolutions(fabs(deceleration_deg_s2)));
+}
+
+void RotaryAxis::setFastStopDeceleration(float deceleration_deg_s2) {
+    motor_.setFastStopDeceleration(angleDegToRevolutions(fabs(deceleration_deg_s2)));
+}
+
+float RotaryAxis::getFastStopDeceleration() const {
+    return revolutionsToAngleDeg(motor_.getFastStopDeceleration());
+}
+
 } // namespace Generic
 } // namespace Stepper

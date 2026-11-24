@@ -47,9 +47,22 @@ void Axis::stop() {
     motor_.stop();
 }
 
-void Axis::emergencyStop() {
-    motor_.stop();
+bool Axis::pause() {
+    return motor_.pause();
+}
+
+bool Axis::resume() {
+    return motor_.resume();
+}
+
+void Axis::fastStop() {
+    motor_.fastStop();
+}
+
+void Axis::emergencyStop(bool disableDriver) {
+    motor_.emergencyStop(disableDriver);
     isHoming_ = false;
+    isHomed_ = false;
 }
 
 bool Axis::isDirectionAllowed(Direction direction) const {

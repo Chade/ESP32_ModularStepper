@@ -5,6 +5,8 @@
 #include <esp_task.h>
 
 namespace Stepper {
+namespace ESP32 {
+
     
 ESP_EVENT_DECLARE_BASE(TaskEventBaseId);
 
@@ -46,6 +48,7 @@ esp_err_t stopEventLoopHandlerUnregister(StopEventId eventId, esp_event_handler_
 esp_err_t stopEventLoopPost(StopEventId eventId, const void *eventData, size_t eventDataSize, uint32_t waitMs = 0);
 esp_err_t stopEventLoopPostISR(StopEventId eventId, const void *eventData, size_t eventDataSize, BaseType_t *taskUnblocked);
 
+} // namespace ESP32
 } // namespace Stepper
 
 #endif // STEPPER_EVENT_HPP

@@ -2,9 +2,10 @@
 #define STEPPER_CORE_HPP
 
 #include "Event.hpp"
-#include "Task.hpp"
+#include "../Generic/Task.hpp"
 
 namespace Stepper {
+namespace ESP32 {
 
 class Core {
 public:
@@ -35,6 +36,7 @@ protected:
     static constexpr const char* log_tag = "Core";
 };
 
+} // namespace ESP32
 } // namespace Stepper
 
 #endif // STEPPER_CORE_HPP

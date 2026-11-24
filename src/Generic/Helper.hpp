@@ -71,7 +71,7 @@ enum class State : uint8_t
     Running = 2,
     Accelerating = 6,
     Decelerating = 10,
-    Paused = 16,
+    Paused = 18,
     Stopped = 32,
     Inhibited = 96,
     EmergencyStop = 224

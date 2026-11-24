@@ -75,6 +75,10 @@ std::unique_ptr<MotorAssembly> MotorAssembly::create(const Generic::MotorConfig&
         config.stepsPerRevolution,
         config.gearRatio);
 
+    if (config.fastStopDeceleration > 0.0f) {
+        assembly->motor_->setFastStopDeceleration(config.fastStopDeceleration);
+    }
+
     return assembly;
 }
 
@@ -131,6 +135,9 @@ void AxisAssembly::attachEndstopsAndLimits(const Generic::AxisConfig& config) {
     }
     if (config.hasSoftLimits) {
         axis_->setLimits(config.minLimit, config.maxLimit);
+    }
+    if (config.fastStopDeceleration > 0.0f) {
+        axis_->setFastStopDeceleration(config.fastStopDeceleration);
     }
 }
 

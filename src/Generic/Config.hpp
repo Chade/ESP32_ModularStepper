@@ -39,6 +39,7 @@ struct MotorConfig {
 
     uint32_t stepsPerRevolution {200};
     float gearRatio {1.0f};
+    float fastStopDeceleration {0.0f}; // rev/s^2 (0 = fall back to active task deceleration)
 };
 
 struct EndstopConfig {
@@ -57,6 +58,7 @@ struct AxisConfig {
     bool hasSoftLimits {false};
     float minLimit {0.0f};
     float maxLimit {0.0f};
+    float fastStopDeceleration {0.0f}; // axis units/s^2 (0 = keep MotorConfig / task deceleration)
 };
 
 struct LinearAxisConfig : public AxisConfig {

@@ -144,7 +144,18 @@ public:
     
     // Axis motion interface & state
     virtual void stop();
-    virtual void emergencyStop();
+    virtual bool pause();
+    virtual bool resume();
+    bool isPaused() const {
+        return motor_.isPaused();
+    };
+
+    virtual void fastStop();
+    virtual void fastStop(float deceleration) = 0;
+    virtual void setFastStopDeceleration(float deceleration) = 0;
+    virtual float getFastStopDeceleration() const = 0;
+
+    virtual void emergencyStop(bool disableDriver = false);
 
 protected:
     Generic::Motor& motor_;

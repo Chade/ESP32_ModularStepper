@@ -25,6 +25,11 @@ public:
     void run(float targetVelocity, float acceleration, float deceleration) override;
     void run(float distance_mm, float targetVelocity, float acceleration, float deceleration) override;
 
+    using Axis::fastStop;
+    void fastStop(float deceleration_mm_s2) override;
+    void setFastStopDeceleration(float deceleration_mm_s2) override;
+    float getFastStopDeceleration() const override;
+
     float getPosition() const override {
         return getPositionMm();
     };

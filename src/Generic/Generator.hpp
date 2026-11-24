@@ -38,6 +38,18 @@ public:
     bool run(uint64_t steps, float targetVelocity, float acceleration, float deceleration, Direction direction);
 
     void stop();
+    bool pause();
+    bool resume();
+    bool isPaused() const {
+        return state_.currentState == State::Paused;
+    }
+
+    void fastStop();
+    void fastStop(float deceleration);
+    void setFastStopDeceleration(float deceleration);
+    float getFastStopDeceleration() const;
+
+    void emergencyStop(bool disableDriver = false);
 
     struct GeneratorState {
         State currentState = State::Undefined; // movement state
@@ -103,6 +115,10 @@ public:
         state_.stepsAcc   = 0; // steps in acceleration phase
         state_.stepsConst = 0; // steps in constant velocity phase
         state_.stepsDec   = 0; // steps in deceleration phase
+
+        pauseRequested_    = false;
+        fastStopRequested_ = false;
+        hasPausedTask_     = false;
     };
 
     bool checkState(GeneratorState state) const;
@@ -146,7 +162,7 @@ public:
     
 private:
     void initializeStateBeforeStep(const GeneratorTask&, GeneratorState& state) const;
-    void advanceStateAfterStep(uint32_t steps, GeneratorState& state) const;
+    void advanceStateAfterStep(uint32_t steps, GeneratorState& state);
     uint32_t computeStepBatchSize(const GeneratorState& state) const;
     float computeStepPeriodUs(UQ20x12 velocity) const;
     
@@ -159,6 +175,13 @@ private:
     virtual void updateStateEvent(State state) const = 0;
 
     Driver& driver_;
+
+    GeneratorTask activeTask_;
+    GeneratorTask pausedTask_;
+    volatile bool pauseRequested_ {false};
+    volatile bool fastStopRequested_ {false};
+    bool hasPausedTask_ {false};
+    UQ20x12 fastStopDeceleration_ {0.0};
 
     static constexpr UQ20x12 minVelocity_ {1.0};  // steps/s
 };

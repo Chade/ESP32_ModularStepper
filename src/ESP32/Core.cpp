@@ -1,7 +1,8 @@
 #include "Core.hpp"
-#include "Log.hpp"
+#include "../Generic/Log.hpp"
 
 namespace Stepper {
+namespace ESP32 {
 
 Core::Core() {
     LOG_INFO("Create task queue");
@@ -156,4 +157,5 @@ void Core::stopEventCallback(void *eventArgs, esp_event_base_t eventBase, int32_
     }
 }
 
+} // namespace ESP32
 } // namespace Stepper

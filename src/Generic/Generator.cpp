@@ -18,6 +18,11 @@ Generator::~Generator() {
 
 bool Generator::run(const GeneratorTask& task) {
     LOG_INFO("Initialize generator state");
+    activeTask_ = task;
+    pauseRequested_ = false;
+    fastStopRequested_ = false;
+    hasPausedTask_ = false;
+
     // Initialize internal state from task
     initializeStateBeforeStep(task, state_);
     updateStateEvent(state_.currentState);
@@ -85,11 +90,128 @@ bool Generator::run(uint64_t steps,
 }
 
 void Generator::stop() {
+    pauseRequested_ = false;
+    fastStopRequested_ = false;
+    hasPausedTask_ = false;
     updateState(state_, State::Stopped);
     driver_.stop();
     state_.currentVelocity = 0.0;
     state_.targetVelocity = 0.0;
     state_.doDirectionChange = false;
+}
+
+bool Generator::pause() {
+    if (state_.currentState == State::Paused) {
+        return true;
+    }
+
+    if (state_.currentVelocity == 0 ||
+        state_.currentState == State::Undefined ||
+        state_.currentState == State::Stopped ||
+        state_.currentState == State::EmergencyStop) {
+        LOG_WARN("Cannot pause generator: not running");
+        return false;
+    }
+
+    fastStopRequested_ = false;
+    pauseRequested_ = true;
+    state_.targetVelocity = 0;
+
+    if (state_.deceleration == 0) {
+        driver_.stop();
+        pauseRequested_ = false;
+        state_.currentVelocity = 0.0;
+        state_.doDirectionChange = false;
+
+        pausedTask_ = activeTask_;
+        if (state_.stepsTotal > 0) {
+            pausedTask_.steps = (state_.stepsDone < state_.stepsTotal)
+                                ? static_cast<uint32_t>(state_.stepsTotal - state_.stepsDone)
+                                : 0;
+        }
+        hasPausedTask_ = true;
+        updateState(state_, State::Paused);
+        return true;
+    }
+
+    driver_.forceStepCallback();
+    return true;
+}
+
+bool Generator::resume() {
+    if (pauseRequested_ && state_.currentVelocity > 0) {
+        GeneratorTask resumeTask = activeTask_;
+        if (state_.stepsTotal > 0) {
+            if (state_.stepsDone >= state_.stepsTotal) {
+                return false;
+            }
+            resumeTask.steps = static_cast<uint32_t>(state_.stepsTotal - state_.stepsDone);
+        }
+        pauseRequested_ = false;
+        hasPausedTask_ = false;
+        return run(resumeTask);
+    }
+
+    if (state_.currentState == State::Paused && hasPausedTask_) {
+        GeneratorTask resumeTask = pausedTask_;
+        hasPausedTask_ = false;
+        pauseRequested_ = false;
+        return run(resumeTask);
+    }
+
+    LOG_WARN("Cannot resume generator: not paused");
+    return false;
+}
+
+void Generator::setFastStopDeceleration(float deceleration) {
+    fastStopDeceleration_ = (deceleration > 0.0f) ? UQ20x12(deceleration) : UQ20x12(0.0);
+}
+
+float Generator::getFastStopDeceleration() const {
+    return static_cast<float>(fastStopDeceleration_);
+}
+
+void Generator::fastStop() {
+    UQ20x12 decel = (fastStopDeceleration_ > 0) ? fastStopDeceleration_ : state_.deceleration;
+    fastStop(static_cast<float>(decel));
+}
+
+void Generator::fastStop(float deceleration) {
+    pauseRequested_ = false;
+    hasPausedTask_ = false;
+
+    if (state_.currentVelocity == 0 ||
+        state_.currentState == State::Undefined ||
+        state_.currentState == State::Paused ||
+        state_.currentState == State::Stopped ||
+        state_.currentState == State::EmergencyStop) {
+        stop();
+        return;
+    }
+
+    if (deceleration <= 0.0f) {
+        stop();
+        return;
+    }
+
+    state_.deceleration = UQ20x12(deceleration);
+    state_.targetVelocity = 0;
+    fastStopRequested_ = true;
+    driver_.forceStepCallback();
+}
+
+void Generator::emergencyStop(bool disableDriver) {
+    pauseRequested_ = false;
+    fastStopRequested_ = false;
+    hasPausedTask_ = false;
+    state_.currentVelocity = 0.0;
+    state_.targetVelocity = 0.0;
+    state_.doDirectionChange = false;
+    updateState(state_, State::EmergencyStop);
+    driver_.stop();
+    if (disableDriver) {
+        driver_.disable();
+    }
 }
 // ---- 64-bit safe fixed-point arithmetic helpers ----
 //
@@ -455,7 +577,7 @@ void Generator::initializeStateBeforeStep(const GeneratorTask& task, GeneratorSt
 
 }
 
-void Generator::advanceStateAfterStep(uint32_t steps, GeneratorState& state) const {
+void Generator::advanceStateAfterStep(uint32_t steps, GeneratorState& state) {
     UQ20x12 lastVelocity = state.currentVelocity;
 
     if (state.currentDirection == Direction::Neutral || state.targetDirection == Direction::Neutral) {
@@ -466,6 +588,45 @@ void Generator::advanceStateAfterStep(uint32_t steps, GeneratorState& state) con
 
     // Update position based on steps taken and current direction
     state.stepsPosition += static_cast<int64_t>(steps) * cast_enum_to_base(state.currentDirection);
+
+    if (pauseRequested_ || fastStopRequested_) {
+        if (state.stepsTotal > 0 && state.currentDirection == state.targetDirection) {
+            state.stepsDone += steps;
+        }
+
+        if (state.stepsTotal > 0 && state.stepsDone >= state.stepsTotal) {
+            state.currentVelocity = 0;
+            state.targetVelocity = 0;
+        }
+        else if (state.currentVelocity > 0) {
+            updateState(state, State::Decelerating);
+            state.currentVelocity = computeVelocity(state.deceleration, state.currentVelocity, UQ20x12(0), steps);
+        }
+
+        if (state.currentVelocity == 0) {
+            if (pauseRequested_) {
+                pauseRequested_ = false;
+                if (state.stepsTotal > 0 && state.stepsDone >= state.stepsTotal) {
+                    hasPausedTask_ = false;
+                    updateState(state, State::Stopped);
+                }
+                else {
+                    pausedTask_ = activeTask_;
+                    if (state.stepsTotal > 0) {
+                        pausedTask_.steps = static_cast<uint32_t>(state.stepsTotal - state.stepsDone);
+                    }
+                    hasPausedTask_ = true;
+                    updateState(state, State::Paused);
+                }
+            }
+            else {
+                fastStopRequested_ = false;
+                hasPausedTask_ = false;
+                updateState(state, State::Stopped);
+            }
+        }
+        return;
+    }
 
     if (state.stepsTotal > 0) {
         if (state.currentDirection == state.targetDirection) {
@@ -570,12 +731,16 @@ uint32_t Generator::computeStepBatchSize(const GeneratorState& state) const {
         UQ20x12 steps = (state.currentVelocity + state.deceleration) / state.deceleration;
         stepsToDo = steps.getInteger();
         if (state.stepsTotal > 0) {
-            uint64_t stepsMax = state.stepsAcc + state.stepsConst + state.stepsDec;
+            uint64_t stepsMax = (pauseRequested_ || fastStopRequested_)
+                                    ? state.stepsTotal
+                                    : (state.stepsAcc + state.stepsConst + state.stepsDec);
             uint64_t stepsRemaining = (state.stepsDone < stepsMax) ? (stepsMax - state.stepsDone) : 1;
             stepsToDo = std::min(stepsToDo, static_cast<uint32_t>((stepsRemaining > UINT32_MAX) ? UINT32_MAX : stepsRemaining));
         }
     }
-    else if (state.currentState == State::Stopped) {
+    else if (state.currentState == State::Paused ||
+             state.currentState == State::Stopped ||
+             state.currentState == State::EmergencyStop) {
         stepsToDo = 0;
     }
     else {
@@ -587,8 +752,10 @@ uint32_t Generator::computeStepBatchSize(const GeneratorState& state) const {
 void Generator::callbackOnStepDone(uint32_t stepsDone, uint32_t& stepsToDo, float& pulsePeriod_us, float& pulsePeriodIncrement_us, void* user_ctx) {
     Generator* self = static_cast<Generator*>(user_ctx);
 
-    // Ignore late ISR notifications after an explicit stop()
-    if (self->state_.currentState == State::Stopped) {
+    // Ignore late ISR notifications after an explicit stop, pause, or emergency stop
+    if (self->state_.currentState == State::Paused ||
+        self->state_.currentState == State::Stopped ||
+        self->state_.currentState == State::EmergencyStop) {
         stepsToDo = 0;
         pulsePeriod_us = 0.0f;
         return;

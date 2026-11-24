@@ -30,6 +30,38 @@ public:
         generator_.stop();
     };
 
+    bool pause() {
+        return generator_.pause();
+    };
+
+    bool resume() {
+        return generator_.resume();
+    };
+
+    bool isPaused() const {
+        return generator_.isPaused();
+    };
+
+    void fastStop() {
+        generator_.fastStop();
+    };
+
+    void fastStop(float deceleration) {
+        generator_.fastStop(revolutionsToSteps(fabs(deceleration)));
+    };
+
+    void setFastStopDeceleration(float deceleration) {
+        generator_.setFastStopDeceleration(revolutionsToSteps(fabs(deceleration)));
+    };
+
+    float getFastStopDeceleration() const {
+        return stepsToRevolutions(generator_.getFastStopDeceleration());
+    };
+
+    void emergencyStop(bool disableDriver = false) {
+        generator_.emergencyStop(disableDriver);
+    };
+
     uint32_t getStepsPerRevolution() const {
         return stepsPerRevolution_;
     };
