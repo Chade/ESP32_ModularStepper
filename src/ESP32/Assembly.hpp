@@ -59,16 +59,10 @@ private:
     std::unique_ptr<Generic::Motor> motor_;
 };
 
-// Higher-level modular unit: composes a MotorAssembly + optional Endstops + Axis (Linear or Rotary)
+// Base class for axis assemblies: composes a MotorAssembly + optional Endstops + Generic::Axis
 class AxisAssembly {
 public:
-    // Create a complete Axis (including its underlying MotorAssembly) from config
-    static std::unique_ptr<AxisAssembly> create(const Generic::AxisConfig& config);
-
-    // Wrap an existing MotorAssembly into an AxisAssembly using the axis/endstop fields of config
-    static std::unique_ptr<AxisAssembly> create(std::unique_ptr<MotorAssembly> motorAssembly, const Generic::AxisConfig& config);
-
-    ~AxisAssembly();
+    virtual ~AxisAssembly();
 
     AxisAssembly(const AxisAssembly&) = delete;
     AxisAssembly& operator=(const AxisAssembly&) = delete;
@@ -77,33 +71,6 @@ public:
 
     Generic::Axis& axis() { return *axis_; }
     const Generic::Axis& axis() const { return *axis_; }
-
-    Generic::AxisConfig::Type axisType() const { return axisType_; }
-
-    // Typed accessors (return nullptr if the axis is of the other type)
-    Generic::LinearAxis* linearAxis() {
-        return (axisType_ == Generic::AxisConfig::Type::Linear)
-                   ? static_cast<Generic::LinearAxis*>(axis_.get())
-                   : nullptr;
-    }
-
-    const Generic::LinearAxis* linearAxis() const {
-        return (axisType_ == Generic::AxisConfig::Type::Linear)
-                   ? static_cast<const Generic::LinearAxis*>(axis_.get())
-                   : nullptr;
-    }
-
-    Generic::RotaryAxis* rotaryAxis() {
-        return (axisType_ == Generic::AxisConfig::Type::Rotary)
-                   ? static_cast<Generic::RotaryAxis*>(axis_.get())
-                   : nullptr;
-    }
-
-    const Generic::RotaryAxis* rotaryAxis() const {
-        return (axisType_ == Generic::AxisConfig::Type::Rotary)
-                   ? static_cast<const Generic::RotaryAxis*>(axis_.get())
-                   : nullptr;
-    }
 
     MotorAssembly& motorAssembly() { return *motorAssembly_; }
     const MotorAssembly& motorAssembly() const { return *motorAssembly_; }
@@ -124,18 +91,48 @@ public:
     Generic::Endstop* endstopMax() { return endstopMax_.get(); }
     const Generic::Endstop* endstopMax() const { return endstopMax_.get(); }
 
-private:
+protected:
     AxisAssembly() = default;
+
+    bool initMotorAndEndstops(std::unique_ptr<MotorAssembly> motorAssembly, const Generic::AxisConfig& config);
+    void attachEndstopsAndLimits(const Generic::AxisConfig& config);
 
     // Declaration order == construction order; reverse == destruction order
     // motorAssembly_ and endstops outlive axis_, and endstop pins outlive endstops.
-    Generic::AxisConfig::Type axisType_ {Generic::AxisConfig::Type::Rotary};
     std::unique_ptr<MotorAssembly> motorAssembly_;
     std::unique_ptr<Generic::Pin> pinEndstopMin_;
     std::unique_ptr<Generic::Pin> pinEndstopMax_;
     std::unique_ptr<Generic::Endstop> endstopMin_;
     std::unique_ptr<Generic::Endstop> endstopMax_;
     std::unique_ptr<Generic::Axis> axis_;
+};
+
+// Type-safe assembly for LinearAxis
+class LinearAxisAssembly : public AxisAssembly {
+public:
+    static std::unique_ptr<LinearAxisAssembly> create(const Generic::LinearAxisConfig& config);
+    static std::unique_ptr<LinearAxisAssembly> create(std::unique_ptr<MotorAssembly> motorAssembly,
+                                                      const Generic::LinearAxisConfig& config);
+
+    Generic::LinearAxis& axis() { return static_cast<Generic::LinearAxis&>(*axis_); }
+    const Generic::LinearAxis& axis() const { return static_cast<const Generic::LinearAxis&>(*axis_); }
+
+private:
+    LinearAxisAssembly() = default;
+};
+
+// Type-safe assembly for RotaryAxis
+class RotaryAxisAssembly : public AxisAssembly {
+public:
+    static std::unique_ptr<RotaryAxisAssembly> create(const Generic::RotaryAxisConfig& config);
+    static std::unique_ptr<RotaryAxisAssembly> create(std::unique_ptr<MotorAssembly> motorAssembly,
+                                                      const Generic::RotaryAxisConfig& config);
+
+    Generic::RotaryAxis& axis() { return static_cast<Generic::RotaryAxis&>(*axis_); }
+    const Generic::RotaryAxis& axis() const { return static_cast<const Generic::RotaryAxis&>(*axis_); }
+
+private:
+    RotaryAxisAssembly() = default;
 };
 
 } // namespace ESP32

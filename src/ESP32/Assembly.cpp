@@ -85,85 +85,53 @@ MotorAssembly::~MotorAssembly() {
 }
 
 // =============================================================================
-// AxisAssembly
+// AxisAssembly (shared base)
 // =============================================================================
 
-std::unique_ptr<AxisAssembly> AxisAssembly::create(const Generic::AxisConfig& config) {
-    auto motorAssembly = MotorAssembly::create(config.motor);
-    if (!motorAssembly) {
-        return nullptr;
-    }
-    return create(std::move(motorAssembly), config);
-}
-
-std::unique_ptr<AxisAssembly> AxisAssembly::create(std::unique_ptr<MotorAssembly> motorAssembly, const Generic::AxisConfig& config) {
+bool AxisAssembly::initMotorAndEndstops(std::unique_ptr<MotorAssembly> motorAssembly, const Generic::AxisConfig& config) {
     if (!motorAssembly) {
         LOG_ERROR("Invalid AxisAssembly: motorAssembly is null");
-        return nullptr;
-    }
-    if (config.unitsPerRevolution <= 0.0f) {
-        LOG_ERROR("Invalid AxisConfig: unitsPerRevolution must be > 0");
-        return nullptr;
+        return false;
     }
     if (config.hasSoftLimits && !(config.minLimit < config.maxLimit)) {
         LOG_ERROR("Invalid AxisConfig: minLimit must be < maxLimit");
-        return nullptr;
+        return false;
     }
     if (config.endstopMin.enabled && !isInputCompatible(config.endstopMin.pin.ioMode)) {
         LOG_ERROR("Invalid AxisConfig: endstopMin pin must use Input or Input_Output IoMode");
-        return nullptr;
+        return false;
     }
     if (config.endstopMax.enabled && !isInputCompatible(config.endstopMax.pin.ioMode)) {
         LOG_ERROR("Invalid AxisConfig: endstopMax pin must use Input or Input_Output IoMode");
-        return nullptr;
+        return false;
     }
 
-    std::unique_ptr<AxisAssembly> assembly(new AxisAssembly());
-    assembly->axisType_      = config.type;
-    assembly->motorAssembly_ = std::move(motorAssembly);
+    motorAssembly_ = std::move(motorAssembly);
 
-    // 1. Optional Endstops
     if (config.endstopMin.enabled) {
-        assembly->pinEndstopMin_ = createPin(config.endstopMin.pin);
-        assembly->endstopMin_    = std::make_unique<ESP32::Endstop>(*assembly->pinEndstopMin_);
-        assembly->endstopMin_->setDebounceUs(config.endstopMin.debounceUs);
+        pinEndstopMin_ = createPin(config.endstopMin.pin);
+        endstopMin_    = std::make_unique<ESP32::Endstop>(*pinEndstopMin_);
+        endstopMin_->setDebounceUs(config.endstopMin.debounceUs);
     }
     if (config.endstopMax.enabled) {
-        assembly->pinEndstopMax_ = createPin(config.endstopMax.pin);
-        assembly->endstopMax_    = std::make_unique<ESP32::Endstop>(*assembly->pinEndstopMax_);
-        assembly->endstopMax_->setDebounceUs(config.endstopMax.debounceUs);
+        pinEndstopMax_ = createPin(config.endstopMax.pin);
+        endstopMax_    = std::make_unique<ESP32::Endstop>(*pinEndstopMax_);
+        endstopMax_->setDebounceUs(config.endstopMax.debounceUs);
     }
 
-    // 2. Axis (Linear or Rotary)
-    switch (config.type) {
-        case Generic::AxisConfig::Type::Linear:
-            assembly->axis_ = std::make_unique<Generic::LinearAxis>(
-                assembly->motorAssembly_->motor(),
-                config.unitsPerRevolution);
-            break;
-        case Generic::AxisConfig::Type::Rotary:
-            assembly->axis_ = std::make_unique<Generic::RotaryAxis>(
-                assembly->motorAssembly_->motor(),
-                config.unitsPerRevolution,
-                config.continuous);
-            break;
-        default:
-            LOG_ERROR("Unsupported AxisConfig::Type: %u", static_cast<unsigned>(config.type));
-            return nullptr;
-    }
+    return true;
+}
 
-    // 3. Attach Endstops & Soft Limits
-    if (assembly->endstopMin_) {
-        assembly->axis_->setEndstopMin(assembly->endstopMin_.get(), config.endstopMin.limitProtection);
+void AxisAssembly::attachEndstopsAndLimits(const Generic::AxisConfig& config) {
+    if (endstopMin_) {
+        axis_->setEndstopMin(endstopMin_.get(), config.endstopMin.limitProtection);
     }
-    if (assembly->endstopMax_) {
-        assembly->axis_->setEndstopMax(assembly->endstopMax_.get(), config.endstopMax.limitProtection);
+    if (endstopMax_) {
+        axis_->setEndstopMax(endstopMax_.get(), config.endstopMax.limitProtection);
     }
     if (config.hasSoftLimits) {
-        assembly->axis_->setLimits(config.minLimit, config.maxLimit);
+        axis_->setLimits(config.minLimit, config.maxLimit);
     }
-
-    return assembly;
 }
 
 AxisAssembly::~AxisAssembly() {
@@ -177,6 +145,71 @@ AxisAssembly::~AxisAssembly() {
     if (endstopMax_) {
         endstopMax_->unregisterCallback();
     }
+}
+
+// =============================================================================
+// LinearAxisAssembly
+// =============================================================================
+
+std::unique_ptr<LinearAxisAssembly> LinearAxisAssembly::create(const Generic::LinearAxisConfig& config) {
+    auto motorAssembly = MotorAssembly::create(config.motor);
+    if (!motorAssembly) {
+        return nullptr;
+    }
+    return create(std::move(motorAssembly), config);
+}
+
+std::unique_ptr<LinearAxisAssembly> LinearAxisAssembly::create(std::unique_ptr<MotorAssembly> motorAssembly,
+                                                               const Generic::LinearAxisConfig& config) {
+    if (config.distanceMmPerRevolution <= 0.0f) {
+        LOG_ERROR("Invalid LinearAxisConfig: distanceMmPerRevolution must be > 0");
+        return nullptr;
+    }
+
+    std::unique_ptr<LinearAxisAssembly> assembly(new LinearAxisAssembly());
+    if (!assembly->initMotorAndEndstops(std::move(motorAssembly), config)) {
+        return nullptr;
+    }
+
+    assembly->axis_ = std::make_unique<Generic::LinearAxis>(
+        assembly->motorAssembly_->motor(),
+        config.distanceMmPerRevolution);
+    assembly->attachEndstopsAndLimits(config);
+
+    return assembly;
+}
+
+// =============================================================================
+// RotaryAxisAssembly
+// =============================================================================
+
+std::unique_ptr<RotaryAxisAssembly> RotaryAxisAssembly::create(const Generic::RotaryAxisConfig& config) {
+    auto motorAssembly = MotorAssembly::create(config.motor);
+    if (!motorAssembly) {
+        return nullptr;
+    }
+    return create(std::move(motorAssembly), config);
+}
+
+std::unique_ptr<RotaryAxisAssembly> RotaryAxisAssembly::create(std::unique_ptr<MotorAssembly> motorAssembly,
+                                                               const Generic::RotaryAxisConfig& config) {
+    if (config.angleDegPerRevolution <= 0.0f) {
+        LOG_ERROR("Invalid RotaryAxisConfig: angleDegPerRevolution must be > 0");
+        return nullptr;
+    }
+
+    std::unique_ptr<RotaryAxisAssembly> assembly(new RotaryAxisAssembly());
+    if (!assembly->initMotorAndEndstops(std::move(motorAssembly), config)) {
+        return nullptr;
+    }
+
+    assembly->axis_ = std::make_unique<Generic::RotaryAxis>(
+        assembly->motorAssembly_->motor(),
+        config.angleDegPerRevolution,
+        config.continuous);
+    assembly->attachEndstopsAndLimits(config);
+
+    return assembly;
 }
 
 } // namespace ESP32

@@ -11,7 +11,7 @@
 //FastRotaryEncoder encoder(33, 32, 35, 100, 100000, 100);
 RotaryEncoder rotaryEncoder( 19, 18, 5, 21 );
 
-std::unique_ptr<Stepper::ESP32::AxisAssembly> axisAssembly;
+std::unique_ptr<Stepper::ESP32::LinearAxisAssembly> axisAssembly;
 Stepper::Generic::LinearAxis::LinearAxisTask task;
 Stepper::ESP32::Homing homing;
 
@@ -24,11 +24,9 @@ void setup() {
 
   while (!Serial) { vTaskDelay(pdMS_TO_TICKS(1000)); }
 
-  // Build runtime configuration for the rotary axis
-  Stepper::Generic::AxisConfig axisCfg;
-  axisCfg.type = Stepper::Generic::AxisConfig::Type::Linear;
-  axisCfg.unitsPerRevolution = 5.0f;
-  axisCfg.continuous = false;
+  // Build runtime configuration for the linear axis
+  Stepper::Generic::LinearAxisConfig axisCfg;
+  axisCfg.distanceMmPerRevolution = 5.0f;
 
   axisCfg.motor.driver.type = Stepper::Generic::DriverConfig::Type::MCPWM;
   axisCfg.motor.driver.enablePin    = {25, false, Stepper::Generic::Pin::IoMode::Input_Output, Stepper::Generic::Pin::PullMode::Floating};
@@ -50,9 +48,9 @@ void setup() {
   axisCfg.endstopMax.debounceUs = 100;
   axisCfg.endstopMax.limitProtection = true;
 
-  axisAssembly = Stepper::ESP32::AxisAssembly::create(axisCfg);
-  if (!axisAssembly || !axisAssembly->linearAxis()) {
-    LOG_ERROR("Failed to initialize AxisAssembly");
+  axisAssembly = Stepper::ESP32::LinearAxisAssembly::create(axisCfg);
+  if (!axisAssembly) {
+    LOG_ERROR("Failed to initialize LinearAxisAssembly");
     return;
   }
 
@@ -87,14 +85,14 @@ void setup() {
   });
 
   rotaryEncoder.onPressed([](unsigned long duration) {
-    if (!axisAssembly || !axisAssembly->linearAxis()) {
+    if (!axisAssembly) {
       return;
     }
-    auto& axis = *axisAssembly->linearAxis();
+    auto& axis = axisAssembly->axis();
     Serial.println("Run task");
     if (duration > 500) {
       homing.homeMinMaxAsync(axis, [&axis](bool success) {
-      Serial.printf("Dual-endstop homing finished: %s | Limits: [%.2f, %.2f] deg | Position: %.2f mm\n",
+      Serial.printf("Dual-endstop homing finished: %s | Limits: [%.2f, %.2f] mm | Position: %.2f mm\n",
                   success ? "SUCCESS" : "FAILED",
                   axis.getMinPositionMm(),
                   axis.getMaxPositionMm(),
@@ -110,13 +108,13 @@ void setup() {
 }
 
 void loop() {
-  Serial.printf("Min(22): %s | Max(23): %s | Homing: %d | Homed: %d | Position: %.2f deg | Limits: [%.2f, %.2f]\n",
+  Serial.printf("Min(12): %s | Max(14): %s | Homing: %d | Homed: %d | Position: %.2f mm | Limits: [%.2f, %.2f]\n",
                 axisAssembly->endstopMin()->isTriggered() ? "TRIG" : "open",
                 axisAssembly->endstopMax()->isTriggered() ? "TRIG" : "open",
                 static_cast<int>(homing.getState()),
-                axisAssembly->linearAxis()->isHomed(),
-                axisAssembly->linearAxis()->getPosition(),
-                axisAssembly->linearAxis()->getMinPositionMm(),
-                axisAssembly->linearAxis()->getMaxPositionMm());
+                axisAssembly->axis().isHomed(),
+                axisAssembly->axis().getPosition(),
+                axisAssembly->axis().getMinPositionMm(),
+                axisAssembly->axis().getMaxPositionMm());
   vTaskDelay(pdMS_TO_TICKS(500));
 }

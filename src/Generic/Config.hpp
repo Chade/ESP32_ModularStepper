@@ -49,18 +49,7 @@ struct EndstopConfig {
 };
 
 struct AxisConfig {
-    enum class Type : uint8_t {
-        Linear = 0,
-        Rotary = 1
-    };
-
-    Type type {Type::Rotary};
     MotorConfig motor;
-
-    // mm per motor revolution (Linear) or degrees per motor revolution (Rotary)
-    float unitsPerRevolution {1.0f};
-    // RotaryAxis only: allow continuous rotation without clamping to [min, max]
-    bool continuous {true};
 
     EndstopConfig endstopMin;
     EndstopConfig endstopMax;
@@ -68,6 +57,15 @@ struct AxisConfig {
     bool hasSoftLimits {false};
     float minLimit {0.0f};
     float maxLimit {0.0f};
+};
+
+struct LinearAxisConfig : public AxisConfig {
+    float distanceMmPerRevolution {1.0f};
+};
+
+struct RotaryAxisConfig : public AxisConfig {
+    float angleDegPerRevolution {360.0f};
+    bool continuous {true};
 };
 
 } // namespace Generic
