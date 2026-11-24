@@ -71,8 +71,8 @@ private:
         return (revolutions * stepsPerRevolutionGeared_);
     };
 
-    inline float stepsToRevolutions(uint32_t steps) const {
-        return (static_cast<float>(steps) / static_cast<float>(stepsPerRevolutionGeared_));
+    inline float stepsToRevolutions(float steps) const {
+        return (steps / static_cast<float>(stepsPerRevolutionGeared_));
     };
 
     Generic::Generator& generator_;

@@ -82,7 +82,7 @@ public:
 
 protected:
     bool approachEndstop(Axis& axis, Axis::EndstopPosition endstopPos, float velocity, float acceleration, float deceleration, float distance = 0.0f);
-    bool backoffFromEndstop(Axis& axis, Axis::EndstopPosition endstopPos, float velocity, float acceleration, float dceleration, float distance);
+    bool backoffFromEndstop(Axis& axis, Axis::EndstopPosition endstopPos, float velocity, float acceleration, float deceleration, float distance);
     bool homeToEndstop(Axis& axis, Axis::EndstopPosition endstopPos, const Config& config);
 
     static bool isDualEndstopStrategy(Strategy strategy) {
@@ -93,7 +93,6 @@ protected:
         return static_cast<Direction>(pos);
     };
 
-    static void restoreLimitProtection(Axis& axis, Axis::EndstopPosition pos);
     void finalizeAxisState(Axis& axis);
 
     Config config_;

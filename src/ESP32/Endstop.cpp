@@ -40,17 +40,21 @@ void Endstop::init() {
     xTaskCreatePinnedToCore(
         Endstop::task,
         "EndstopTask",
-        2048,
+        4096,
         this,
         configMAX_PRIORITIES - 2,
         &taskHandle_,
         1
     );
     
-    // Ignore error if ISR service is already installed
-    esp_err_t err = gpio_install_isr_service(0);
-    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
-        ESP_ERROR_CHECK(err);
+    // Install GPIO ISR service once (ESP-IDF logs an error if called again)
+    static bool isrServiceInstalled = false;
+    if (!isrServiceInstalled) {
+        esp_err_t err = gpio_install_isr_service(0);
+        if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+            ESP_ERROR_CHECK(err);
+        }
+        isrServiceInstalled = true;
     }
     
     gpio_num_t gpioNum = static_cast<gpio_num_t>(pin_.getPin());
@@ -86,12 +90,6 @@ void IRAM_ATTR Endstop::isrHandler(void* args) {
         return;
     }
 
-    uint32_t now = static_cast<uint32_t>(esp_timer_get_time());
-    if (self->debounce_us_ > 0 && (now - self->lastInterruptTimeUs_) < self->debounce_us_) {
-        return;
-    }
-    self->lastInterruptTimeUs_ = now;
-
     int level = gpio_get_level(static_cast<gpio_num_t>(self->pin_.getPin()));
     Edge edge = (level != 0) ? Edge::Rising : Edge::Falling;
     
@@ -105,6 +103,19 @@ void Endstop::task(void* args) {
     Edge edge;
     for (;;) {
         if (xQueueReceive(self->eventQueue_, &edge, portMAX_DELAY) == pdTRUE) {
+            if (self->debounce_us_ > 0) {
+                // Settling-based debounce: wait until no new edges arrive for debounce_us_,
+                // then evaluate the final settled pin level so bounce edges are never lost.
+                TickType_t debounceTicks = pdMS_TO_TICKS((self->debounce_us_ + 999) / 1000);
+                if (debounceTicks == 0) {
+                    debounceTicks = 1;
+                }
+                while (xQueueReceive(self->eventQueue_, &edge, debounceTicks) == pdTRUE) {
+                    // Drain bouncing edges until the signal settles
+                }
+                int settledLevel = gpio_get_level(static_cast<gpio_num_t>(self->pin_.getPin()));
+                edge = (settledLevel != 0) ? Edge::Rising : Edge::Falling;
+            }
             self->triggerCallback(edge);
         }
     }

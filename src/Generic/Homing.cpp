@@ -9,14 +9,6 @@ Homing::Homing(const Config& config)
 
 };
 
-void Homing::restoreLimitProtection(Axis& axis, Axis::EndstopPosition pos) {
-    if (pos == Axis::EndstopPosition::Min && axis.isLimitProtectionMinEnabled()) {
-        axis.enableLimitProtectionMin(true);
-    } else if (pos == Axis::EndstopPosition::Max && axis.isLimitProtectionMaxEnabled()) {
-        axis.enableLimitProtectionMax(true);
-    }
-}
-
 void Homing::finalizeAxisState(Axis& axis) {
     auto& generator = axis.motor().generator();
     generator.driver().reset(true);
@@ -51,7 +43,7 @@ bool Homing::homeToEndstop(Axis& axis, Axis::EndstopPosition endstopPos, const C
         return false;
     }
 
-    // Step 3: Slow Approach (bounded by retractDistance * 1.5f)
+    // Step 3: Slow Approach (bounded by retractDistance * 2.0f)
     state_ = State::SlowApproach;
     if (!approachEndstop(axis, endstopPos, config.slowVelocity, config.acceleration, config.deceleration, config.retractDistance * 2.0f)) {
         return false;
@@ -84,13 +76,13 @@ bool Homing::approachEndstop(Axis& axis, Axis::EndstopPosition endstopPos, float
     axis.waitForState(Stepper::State::Stopped);
 
     if (!targetEndstop->isTriggered()) {
-        LOG_ERROR("Endstop after approach not triggered!", distance);
+        LOG_ERROR("Endstop after approach not triggered (cutoff distance: %.2f)!", distance);
         return false;
     }
     return true;
 }
 
-bool Homing::backoffFromEndstop(Axis& axis, Axis::EndstopPosition endstopPos, float velocity, float acceleration, float dceleration, float distance) {
+bool Homing::backoffFromEndstop(Axis& axis, Axis::EndstopPosition endstopPos, float velocity, float acceleration, float deceleration, float distance) {
     if (distance == 0.0f) {
         LOG_ERROR("Backoff distance must not be zero!");
         return false;
@@ -110,7 +102,7 @@ bool Homing::backoffFromEndstop(Axis& axis, Axis::EndstopPosition endstopPos, fl
     Direction direction = reverseDirection(searchDirectionFor(endstopPos));
     float signedVelocity = fabs(velocity) * sign(direction);
     LOG_INFO("Backing off from endstop %s with velocity %.2f, distance: %.2f", (endstopPos == Axis::EndstopPosition::Min ? "MIN" : "MAX"), signedVelocity, distance);
-    axis.run(distance, signedVelocity, acceleration, dceleration);
+    axis.run(distance, signedVelocity, acceleration, deceleration);
     axis.waitForState(Stepper::State::Stopped);
 
     if (targetEndstop->isTriggered()) {
@@ -166,7 +158,7 @@ bool Homing::home(Axis& axis, const Config& config) {
         axis.setLimits(minPos, maxPos);
 
         // 3. Final back-off off the second switch
-        if (!backoffFromEndstop(axis, secondEndstop, config.slowVelocity, config.acceleration, config.deceleration, config.backoffDistance)) {
+        if (!backoffFromEndstop(axis, secondEndstop, config.fastVelocity, config.acceleration, config.deceleration, config.backoffDistance)) {
             state_ = State::Failed;
             axis.setHoming(false);
             return false;
@@ -201,7 +193,7 @@ bool Homing::home(Axis& axis, const Config& config) {
     }
     axis.setPosition(config.homePosition);
 
-    if (!backoffFromEndstop(axis, targetEndstop, config.slowVelocity, config.acceleration, config.deceleration, config.backoffDistance)) {
+    if (!backoffFromEndstop(axis, targetEndstop, config.fastVelocity, config.acceleration, config.deceleration, config.backoffDistance)) {
         state_ = State::Failed;
         axis.setHoming(false);
         return false;

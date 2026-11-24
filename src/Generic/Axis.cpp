@@ -88,7 +88,7 @@ bool Axis::enableLimitProtectionMin(bool enable) {
         return false;
     }
 
-    if (enable && !limitProtectionMinEnabled_) {
+    if (enable && (!limitProtectionMinEnabled_ || !endstopMin_->hasCallback())) {
         endstopMin_->registerCallback(Generic::Endstop::Edge::Both, [this](Generic::Endstop::Edge) {
             if (limitProtectionMinEnabled_ && endstopMin_->isTriggered()) {
                 Direction direction = motor_.generator().getState().currentDirection;
@@ -110,7 +110,7 @@ bool Axis::enableLimitProtectionMax(bool enable) {
         return false;
     }
 
-    if (enable && !limitProtectionMaxEnabled_) {
+    if (enable && (!limitProtectionMaxEnabled_ || !endstopMax_->hasCallback())) {
         endstopMax_->registerCallback(Generic::Endstop::Edge::Both, [this](Generic::Endstop::Edge) {
             if (limitProtectionMaxEnabled_ && endstopMax_->isTriggered()) {
                 Direction direction = motor_.generator().getState().currentDirection;

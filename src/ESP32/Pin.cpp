@@ -7,12 +7,14 @@ namespace ESP32 {
 
     Pin::Pin(int8_t pin,IoMode ioMode, PullMode pullMode)
             : Generic::Pin(pin, ioMode, pullMode) {
+        ESP_ERROR_CHECK(gpio_reset_pin(static_cast<gpio_num_t>(gpio_)));
         setIoMode(ioMode);
         setPullMode(pullMode);
     }
 
     Pin::Pin(uint8_t pin, bool inverse,IoMode ioMode, PullMode pullMode)
             : Generic::Pin(pin, inverse, ioMode, pullMode) {
+        ESP_ERROR_CHECK(gpio_reset_pin(static_cast<gpio_num_t>(gpio_)));
         setIoMode(ioMode);
         setPullMode(pullMode);
     }

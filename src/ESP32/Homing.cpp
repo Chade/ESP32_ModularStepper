@@ -140,22 +140,6 @@ void Homing::abortHoming() {
 
         if (activeAxis_ != nullptr) {
             activeAxis_->stop();
-            auto cleanupEndstop = [&](Generic::Axis::EndstopPosition pos) {
-                Generic::Endstop* e = activeAxis_->getEndstop(pos);
-                if (e != nullptr) {
-                    e->unregisterCallback();
-                }
-                restoreLimitProtection(*activeAxis_, pos);
-            };
-            if (isDualEndstopStrategy(pendingConfig_.strategy)) {
-                cleanupEndstop(Generic::Axis::EndstopPosition::Min);
-                cleanupEndstop(Generic::Axis::EndstopPosition::Max);
-            } else {
-                Generic::Axis::EndstopPosition target = (pendingConfig_.strategy == Strategy::Min)
-                                                        ? Generic::Axis::EndstopPosition::Min
-                                                        : Generic::Axis::EndstopPosition::Max;
-                cleanupEndstop(target);
-            }
             activeAxis_->setHoming(false);
             activeAxis_ = nullptr;
         }
