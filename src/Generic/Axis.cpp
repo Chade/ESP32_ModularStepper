@@ -65,6 +65,10 @@ void Axis::emergencyStop(bool disableDriver) {
     isHomed_ = false;
 }
 
+bool Axis::clearEmergencyStop(bool enableDriver) {
+    return motor_.clearEmergencyStop(enableDriver);
+}
+
 bool Axis::isDirectionAllowed(Direction direction) const {
     if (isHoming_) {
         return true;

@@ -17,6 +17,15 @@ Generator::~Generator() {
 }
 
 bool Generator::run(const GeneratorTask& task) {
+    if (state_.currentState == State::EmergencyStop) {
+        LOG_ERROR("Cannot start generator: emergency stop is latched");
+        return false;
+    }
+    if (!driver_.isEnabled()) {
+        LOG_WARN("Cannot start generator: driver is disabled");
+        return false;
+    }
+
     LOG_INFO("Initialize generator state");
     activeTask_ = task;
     pauseRequested_ = false;
@@ -93,7 +102,9 @@ void Generator::stop() {
     pauseRequested_ = false;
     fastStopRequested_ = false;
     hasPausedTask_ = false;
-    updateState(state_, State::Stopped);
+    if (state_.currentState != State::EmergencyStop) {
+        updateState(state_, State::Stopped);
+    }
     driver_.stop();
     state_.currentVelocity = 0.0;
     state_.targetVelocity = 0.0;
@@ -212,6 +223,21 @@ void Generator::emergencyStop(bool disableDriver) {
     if (disableDriver) {
         driver_.disable();
     }
+}
+
+bool Generator::clearEmergencyStop(bool enableDriver) {
+    if (state_.currentState != State::EmergencyStop) {
+        return false;
+    }
+    pauseRequested_ = false;
+    fastStopRequested_ = false;
+    hasPausedTask_ = false;
+    driver_.reset();
+    if (enableDriver) {
+        driver_.enable();
+    }
+    updateState(state_, State::Stopped);
+    return true;
 }
 // ---- 64-bit safe fixed-point arithmetic helpers ----
 //

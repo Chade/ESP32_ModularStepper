@@ -50,6 +50,10 @@ public:
     float getFastStopDeceleration() const;
 
     void emergencyStop(bool disableDriver = false);
+    bool clearEmergencyStop(bool enableDriver = false);
+    bool isEmergencyStopped() const {
+        return state_.currentState == State::EmergencyStop;
+    }
 
     struct GeneratorState {
         State currentState = State::Undefined; // movement state

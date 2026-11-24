@@ -8,11 +8,12 @@
 #include "Helper.hpp"
 #include "Motor.hpp"
 #include "Endstop.hpp"
+#include "StopController.hpp"
 
 namespace Stepper {
 namespace Generic {
 
-class Axis {
+class Axis : public IStoppable {
 public:
     enum class EndstopPosition : int8_t {
         Min = -1,
@@ -144,18 +145,22 @@ public:
     
     // Axis motion interface & state
     virtual void stop();
-    virtual bool pause();
-    virtual bool resume();
+    bool pause() override;
+    bool resume() override;
     bool isPaused() const {
         return motor_.isPaused();
     };
 
-    virtual void fastStop();
-    virtual void fastStop(float deceleration) = 0;
+    void fastStop() override;
+    void fastStop(float deceleration) override = 0;
     virtual void setFastStopDeceleration(float deceleration) = 0;
     virtual float getFastStopDeceleration() const = 0;
 
-    virtual void emergencyStop(bool disableDriver = false);
+    void emergencyStop(bool disableDriver = false) override;
+    bool clearEmergencyStop(bool enableDriver = false) override;
+    bool isEmergencyStopped() const {
+        return motor_.isEmergencyStopped();
+    };
 
 protected:
     Generic::Motor& motor_;

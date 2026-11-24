@@ -5,11 +5,12 @@
 
 #include "Generator.hpp"
 #include "Helper.hpp"
+#include "StopController.hpp"
 
 namespace Stepper {
 namespace Generic {
 
-class Motor {
+class Motor : public IStoppable {
 public:
     Motor() = delete;
     explicit Motor(Generic::Generator& generator, uint32_t stepsPerRevolution = 200, float gearRatio = 1.0);
@@ -30,11 +31,11 @@ public:
         generator_.stop();
     };
 
-    bool pause() {
+    bool pause() override {
         return generator_.pause();
     };
 
-    bool resume() {
+    bool resume() override {
         return generator_.resume();
     };
 
@@ -42,11 +43,11 @@ public:
         return generator_.isPaused();
     };
 
-    void fastStop() {
+    void fastStop() override {
         generator_.fastStop();
     };
 
-    void fastStop(float deceleration) {
+    void fastStop(float deceleration) override {
         generator_.fastStop(revolutionsToSteps(fabs(deceleration)));
     };
 
@@ -58,8 +59,16 @@ public:
         return stepsToRevolutions(generator_.getFastStopDeceleration());
     };
 
-    void emergencyStop(bool disableDriver = false) {
+    void emergencyStop(bool disableDriver = false) override {
         generator_.emergencyStop(disableDriver);
+    };
+
+    bool clearEmergencyStop(bool enableDriver = false) override {
+        return generator_.clearEmergencyStop(enableDriver);
+    };
+
+    bool isEmergencyStopped() const {
+        return generator_.isEmergencyStopped();
     };
 
     uint32_t getStepsPerRevolution() const {

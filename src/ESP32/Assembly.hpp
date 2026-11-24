@@ -12,6 +12,7 @@
 #include "../Generic/Generator.hpp"
 #include "../Generic/Motor.hpp"
 #include "../Generic/Pin.hpp"
+#include "../Generic/StopController.hpp"
 
 namespace Stepper {
 namespace ESP32 {
@@ -20,7 +21,8 @@ namespace ESP32 {
 // Members are declared in strict dependency order so C++ destroys them in exact reverse order.
 class MotorAssembly {
 public:
-    static std::unique_ptr<MotorAssembly> create(const Generic::MotorConfig& config);
+    static std::unique_ptr<MotorAssembly> create(const Generic::MotorConfig& config,
+                                                 Generic::StopController* stopController = nullptr);
 
     ~MotorAssembly();
 
@@ -51,6 +53,8 @@ private:
     MotorAssembly() = default;
 
     // Declaration order == construction order; reverse == destruction order
+    Generic::StopController* stopController_ {nullptr};
+    int16_t registeredId_ {-1};
     std::unique_ptr<Generic::Pin> pinEnable_;
     std::unique_ptr<Generic::Pin> pinStep_;
     std::unique_ptr<Generic::Pin> pinDirection_;
@@ -96,9 +100,12 @@ protected:
 
     bool initMotorAndEndstops(std::unique_ptr<MotorAssembly> motorAssembly, const Generic::AxisConfig& config);
     void attachEndstopsAndLimits(const Generic::AxisConfig& config);
+    bool registerWithStopController(const Generic::AxisConfig& config, Generic::StopController* stopController);
 
     // Declaration order == construction order; reverse == destruction order
     // motorAssembly_ and endstops outlive axis_, and endstop pins outlive endstops.
+    Generic::StopController* stopController_ {nullptr};
+    int16_t registeredId_ {-1};
     std::unique_ptr<MotorAssembly> motorAssembly_;
     std::unique_ptr<Generic::Pin> pinEndstopMin_;
     std::unique_ptr<Generic::Pin> pinEndstopMax_;
@@ -110,9 +117,11 @@ protected:
 // Type-safe assembly for LinearAxis
 class LinearAxisAssembly : public AxisAssembly {
 public:
-    static std::unique_ptr<LinearAxisAssembly> create(const Generic::LinearAxisConfig& config);
+    static std::unique_ptr<LinearAxisAssembly> create(const Generic::LinearAxisConfig& config,
+                                                      Generic::StopController* stopController = nullptr);
     static std::unique_ptr<LinearAxisAssembly> create(std::unique_ptr<MotorAssembly> motorAssembly,
-                                                      const Generic::LinearAxisConfig& config);
+                                                      const Generic::LinearAxisConfig& config,
+                                                      Generic::StopController* stopController = nullptr);
 
     Generic::LinearAxis& axis() { return static_cast<Generic::LinearAxis&>(*axis_); }
     const Generic::LinearAxis& axis() const { return static_cast<const Generic::LinearAxis&>(*axis_); }
@@ -124,9 +133,11 @@ private:
 // Type-safe assembly for RotaryAxis
 class RotaryAxisAssembly : public AxisAssembly {
 public:
-    static std::unique_ptr<RotaryAxisAssembly> create(const Generic::RotaryAxisConfig& config);
+    static std::unique_ptr<RotaryAxisAssembly> create(const Generic::RotaryAxisConfig& config,
+                                                      Generic::StopController* stopController = nullptr);
     static std::unique_ptr<RotaryAxisAssembly> create(std::unique_ptr<MotorAssembly> motorAssembly,
-                                                      const Generic::RotaryAxisConfig& config);
+                                                      const Generic::RotaryAxisConfig& config,
+                                                      Generic::StopController* stopController = nullptr);
 
     Generic::RotaryAxis& axis() { return static_cast<Generic::RotaryAxis&>(*axis_); }
     const Generic::RotaryAxis& axis() const { return static_cast<const Generic::RotaryAxis&>(*axis_); }

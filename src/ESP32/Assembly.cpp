@@ -25,7 +25,8 @@ bool isInputCompatible(Generic::Pin::IoMode mode) {
 // MotorAssembly
 // =============================================================================
 
-std::unique_ptr<MotorAssembly> MotorAssembly::create(const Generic::MotorConfig& config) {
+std::unique_ptr<MotorAssembly> MotorAssembly::create(const Generic::MotorConfig& config,
+                                                     Generic::StopController* stopController) {
     if (config.driver.microsteps == 0) {
         LOG_ERROR("Invalid MotorConfig: microsteps must be > 0");
         return nullptr;
@@ -79,10 +80,27 @@ std::unique_ptr<MotorAssembly> MotorAssembly::create(const Generic::MotorConfig&
         assembly->motor_->setFastStopDeceleration(config.fastStopDeceleration);
     }
 
+    if (stopController != nullptr) {
+        if (config.id < 0) {
+            LOG_WARN("MotorAssembly: StopController provided but MotorConfig::id < 0; skipping auto-registration");
+        } else {
+            if (!stopController->registerTarget(config.id, *assembly->motor_)) {
+                return nullptr;
+            }
+            assembly->stopController_ = stopController;
+            assembly->registeredId_ = config.id;
+        }
+    }
+
     return assembly;
 }
 
 MotorAssembly::~MotorAssembly() {
+    if (stopController_ != nullptr && registeredId_ >= 0) {
+        stopController_->unregisterTarget(registeredId_);
+        stopController_ = nullptr;
+        registeredId_ = -1;
+    }
     if (motor_) {
         motor_->stop();
     }
@@ -141,7 +159,28 @@ void AxisAssembly::attachEndstopsAndLimits(const Generic::AxisConfig& config) {
     }
 }
 
+bool AxisAssembly::registerWithStopController(const Generic::AxisConfig& config, Generic::StopController* stopController) {
+    if (stopController == nullptr) {
+        return true;
+    }
+    if (config.id < 0) {
+        LOG_WARN("AxisAssembly: StopController provided but AxisConfig::id < 0; skipping auto-registration");
+        return true;
+    }
+    if (!stopController->registerTarget(config.id, *axis_)) {
+        return false;
+    }
+    stopController_ = stopController;
+    registeredId_ = config.id;
+    return true;
+}
+
 AxisAssembly::~AxisAssembly() {
+    if (stopController_ != nullptr && registeredId_ >= 0) {
+        stopController_->unregisterTarget(registeredId_);
+        stopController_ = nullptr;
+        registeredId_ = -1;
+    }
     if (axis_) {
         axis_->stop();
     }
@@ -158,16 +197,18 @@ AxisAssembly::~AxisAssembly() {
 // LinearAxisAssembly
 // =============================================================================
 
-std::unique_ptr<LinearAxisAssembly> LinearAxisAssembly::create(const Generic::LinearAxisConfig& config) {
+std::unique_ptr<LinearAxisAssembly> LinearAxisAssembly::create(const Generic::LinearAxisConfig& config,
+                                                               Generic::StopController* stopController) {
     auto motorAssembly = MotorAssembly::create(config.motor);
     if (!motorAssembly) {
         return nullptr;
     }
-    return create(std::move(motorAssembly), config);
+    return create(std::move(motorAssembly), config, stopController);
 }
 
 std::unique_ptr<LinearAxisAssembly> LinearAxisAssembly::create(std::unique_ptr<MotorAssembly> motorAssembly,
-                                                               const Generic::LinearAxisConfig& config) {
+                                                               const Generic::LinearAxisConfig& config,
+                                                               Generic::StopController* stopController) {
     if (config.distanceMmPerRevolution <= 0.0f) {
         LOG_ERROR("Invalid LinearAxisConfig: distanceMmPerRevolution must be > 0");
         return nullptr;
@@ -183,6 +224,10 @@ std::unique_ptr<LinearAxisAssembly> LinearAxisAssembly::create(std::unique_ptr<M
         config.distanceMmPerRevolution);
     assembly->attachEndstopsAndLimits(config);
 
+    if (!assembly->registerWithStopController(config, stopController)) {
+        return nullptr;
+    }
+
     return assembly;
 }
 
@@ -190,16 +235,18 @@ std::unique_ptr<LinearAxisAssembly> LinearAxisAssembly::create(std::unique_ptr<M
 // RotaryAxisAssembly
 // =============================================================================
 
-std::unique_ptr<RotaryAxisAssembly> RotaryAxisAssembly::create(const Generic::RotaryAxisConfig& config) {
+std::unique_ptr<RotaryAxisAssembly> RotaryAxisAssembly::create(const Generic::RotaryAxisConfig& config,
+                                                               Generic::StopController* stopController) {
     auto motorAssembly = MotorAssembly::create(config.motor);
     if (!motorAssembly) {
         return nullptr;
     }
-    return create(std::move(motorAssembly), config);
+    return create(std::move(motorAssembly), config, stopController);
 }
 
 std::unique_ptr<RotaryAxisAssembly> RotaryAxisAssembly::create(std::unique_ptr<MotorAssembly> motorAssembly,
-                                                               const Generic::RotaryAxisConfig& config) {
+                                                               const Generic::RotaryAxisConfig& config,
+                                                               Generic::StopController* stopController) {
     if (config.angleDegPerRevolution <= 0.0f) {
         LOG_ERROR("Invalid RotaryAxisConfig: angleDegPerRevolution must be > 0");
         return nullptr;
@@ -215,6 +262,10 @@ std::unique_ptr<RotaryAxisAssembly> RotaryAxisAssembly::create(std::unique_ptr<M
         config.angleDegPerRevolution,
         config.continuous);
     assembly->attachEndstopsAndLimits(config);
+
+    if (!assembly->registerWithStopController(config, stopController)) {
+        return nullptr;
+    }
 
     return assembly;
 }

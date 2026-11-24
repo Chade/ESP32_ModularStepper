@@ -37,6 +37,7 @@ struct DriverConfig {
 struct MotorConfig {
     DriverConfig driver;
 
+    int16_t id {-1}; // Optional StopController ID (>= 0 to auto-register)
     uint32_t stepsPerRevolution {200};
     float gearRatio {1.0f};
     float fastStopDeceleration {0.0f}; // rev/s^2 (0 = fall back to active task deceleration)
@@ -50,6 +51,7 @@ struct EndstopConfig {
 };
 
 struct AxisConfig {
+    int16_t id {-1}; // Optional StopController ID (>= 0 to auto-register)
     MotorConfig motor;
 
     EndstopConfig endstopMin;
