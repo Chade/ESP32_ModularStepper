@@ -1,14 +1,8 @@
 #include <ESP32RotaryEncoder.h>
-//#include "FastRotaryEncoder.hpp"
+#include <ESP32_ModularStepper.h>
 
 #include <memory>
 
-#include "src/ESP32/Assembly.hpp"
-#include "src/ESP32/Homing.hpp"
-#include "src/Generic/Log.hpp"
-
-
-//FastRotaryEncoder encoder(33, 32, 35, 100, 100000, 100);
 RotaryEncoder rotaryEncoder( 19, 18, 5, 21 );
 
 std::unique_ptr<Stepper::ESP32::LinearAxisAssembly> axisAssembly;
@@ -16,7 +10,6 @@ Stepper::Generic::LinearAxis::LinearAxisTask task;
 Stepper::ESP32::Homing homing;
 
 void setup() {
-  // put your setup code here, to run once:
   Serial.begin(115200);
   Serial.setDebugOutput(true);
 
@@ -37,7 +30,7 @@ void setup() {
   axisCfg.motor.stepsPerRevolution = 200;
   axisCfg.motor.gearRatio = 1.0f;
 
-  // Endstop pins on GPIO 12 (Min) & GPIO 14 (Max), active-low (inverse=true) with internal pull-up
+  // Endstop pins on GPIO 12 (Min) & GPIO 14 (Max) with internal pull-up
   axisCfg.endstopMin.enabled = true;
   axisCfg.endstopMin.pin = {12, false, Stepper::Generic::Pin::IoMode::Input, Stepper::Generic::Pin::PullMode::PullUp};
   axisCfg.endstopMin.debounceUs = 100;
@@ -54,7 +47,6 @@ void setup() {
     return;
   }
 
-  //task.revolutions = 0.0f;
   task.position = 0.0f;
   task.velocity = 10.0;
   task.acceleration = 10.0f;
@@ -65,16 +57,16 @@ void setup() {
   rotaryEncoder.setStepValue(1);
   rotaryEncoder.setEncoderValue(task.position);
 
-  // Initialize dual-endstop homing (Min -> Max) with very slow speeds for safe testing
+  // Initialize dual-endstop homing (Min -> Max)
   Stepper::Generic::Homing::Config homingCfg;
   homingCfg.strategy = Stepper::Generic::Homing::Strategy::MinThenMax;
-  homingCfg.fastVelocity = 10.0f;       // 10 deg/s
-  homingCfg.slowVelocity = 2.0f;        // 2 deg/s
-  homingCfg.acceleration = 50.0f;      // 20 deg/s^2
-  homingCfg.deceleration = 50.0f;      // 20 deg/s^2
-  homingCfg.retractDistance = 5.0f;     // 5 deg back-off between fast & slow approach
-  homingCfg.backoffDistance = 10.0f;     // 5 deg final pull-off so motor doesn't rest on Max switch
-  homingCfg.maxTravelDistance = 115.0f; // abort if switch not found within 110 deg
+  homingCfg.fastVelocity = 10.0f;
+  homingCfg.slowVelocity = 2.0f;
+  homingCfg.acceleration = 50.0f;
+  homingCfg.deceleration = 50.0f;
+  homingCfg.retractDistance = 5.0f;
+  homingCfg.backoffDistance = 10.0f;
+  homingCfg.maxTravelDistance = 115.0f;
   homingCfg.homePosition = 0.0f;
   homing.setConfig(homingCfg);
 
@@ -92,11 +84,11 @@ void setup() {
     Serial.println("Run task");
     if (duration > 500) {
       homing.homeMinMaxAsync(axis, [&axis](bool success) {
-      Serial.printf("Dual-endstop homing finished: %s | Limits: [%.2f, %.2f] mm | Position: %.2f mm\n",
-                  success ? "SUCCESS" : "FAILED",
-                  axis.getMinPositionMm(),
-                  axis.getMaxPositionMm(),
-                  axis.getPosition());
+        Serial.printf("Dual-endstop homing finished: %s | Limits: [%.2f, %.2f] mm | Position: %.2f mm\n",
+                      success ? "SUCCESS" : "FAILED",
+                      axis.getMinPositionMm(),
+                      axis.getMaxPositionMm(),
+                      axis.getPosition());
       });
       return;
     }

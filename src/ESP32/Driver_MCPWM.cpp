@@ -1,8 +1,20 @@
+#include <esp_idf_version.h>
 #include <hal/mcpwm_types.h>
 #include <driver/mcpwm_gen.h>
 #include <driver/mcpwm_sync.h>
 #include <driver/mcpwm_timer.h>
 #include <soc/soc_caps.h>
+#if !defined(SOC_MCPWM_GROUPS)
+#include <hal/mcpwm_ll.h>
+#endif
+
+#if defined(SOC_MCPWM_GROUPS)
+#define STEPPER_MCPWM_GROUPS SOC_MCPWM_GROUPS
+#elif defined(MCPWM_LL_GROUP_NUM)
+#define STEPPER_MCPWM_GROUPS MCPWM_LL_GROUP_NUM
+#else
+#define STEPPER_MCPWM_GROUPS 2
+#endif
 
 #include "Driver_MCPWM.hpp"
 #include "../Generic/Log.hpp"
@@ -103,13 +115,13 @@ namespace MCPWM {
             return false;
         }
 
-        if (requestedGroupId_ >= SOC_MCPWM_GROUPS) {
-            LOG_ERROR("Invalid MCPWM group id %d (available groups: 0..%d)", requestedGroupId_, SOC_MCPWM_GROUPS - 1);
+        if (requestedGroupId_ >= STEPPER_MCPWM_GROUPS) {
+            LOG_ERROR("Invalid MCPWM group id %d (available groups: 0..%d)", requestedGroupId_, STEPPER_MCPWM_GROUPS - 1);
             return false;
         }
 
         const int groupStart = (requestedGroupId_ >= 0) ? requestedGroupId_ : 0;
-        const int groupEnd   = (requestedGroupId_ >= 0) ? requestedGroupId_ : (SOC_MCPWM_GROUPS - 1);
+        const int groupEnd   = (requestedGroupId_ >= 0) ? requestedGroupId_ : (STEPPER_MCPWM_GROUPS - 1);
 
         for (int group = groupStart; group <= groupEnd; ++group) {
             mcpwm_timer_config_t stepTimerConfig = {};
@@ -203,10 +215,12 @@ namespace MCPWM {
         mcpwm_generator_config_t generatorConfig = {};
         generatorConfig.gen_gpio_num = pinStep_.getPin();
         generatorConfig.flags.invert_pwm = pinStep_.getLevelDisabled();
+#if ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(6, 0, 0)
         generatorConfig.flags.io_loop_back = 0;
         generatorConfig.flags.io_od_mode = 0;
         generatorConfig.flags.pull_up = 0;
         generatorConfig.flags.pull_down = 1;
+#endif
 
         if (mcpwm_new_generator(operatorHandle_, &generatorConfig, &generatorHandle_) != ESP_OK ||
             mcpwm_generator_set_action_on_timer_event(generatorHandle_,

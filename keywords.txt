@@ -1,0 +1,124 @@
+#######################################
+# Syntax Coloring Map For ESP32_ModularStepper
+#######################################
+
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+
+Pin	KEYWORD1
+Driver	KEYWORD1
+Generator	KEYWORD1
+Motor	KEYWORD1
+Endstop	KEYWORD1
+Axis	KEYWORD1
+LinearAxis	KEYWORD1
+RotaryAxis	KEYWORD1
+Homing	KEYWORD1
+IStoppable	KEYWORD1
+StopController	KEYWORD1
+MotorAssembly	KEYWORD1
+AxisAssembly	KEYWORD1
+LinearAxisAssembly	KEYWORD1
+RotaryAxisAssembly	KEYWORD1
+PinConfig	KEYWORD1
+DriverConfig	KEYWORD1
+MotorConfig	KEYWORD1
+EndstopConfig	KEYWORD1
+AxisConfig	KEYWORD1
+LinearAxisConfig	KEYWORD1
+RotaryAxisConfig	KEYWORD1
+GeneratorTask	KEYWORD1
+GeneratorState	KEYWORD1
+MotorTask	KEYWORD1
+LinearAxisTask	KEYWORD1
+RotaryAxisTask	KEYWORD1
+StopEventData	KEYWORD1
+Direction	KEYWORD1
+State	KEYWORD1
+StopEventId	KEYWORD1
+TaskEventId	KEYWORD1
+UQ20x12	KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+
+create	KEYWORD2
+init	KEYWORD2
+run	KEYWORD2
+stop	KEYWORD2
+pause	KEYWORD2
+resume	KEYWORD2
+fastStop	KEYWORD2
+emergencyStop	KEYWORD2
+clearEmergencyStop	KEYWORD2
+isPaused	KEYWORD2
+isEmergencyStopped	KEYWORD2
+setFastStopDeceleration	KEYWORD2
+getFastStopDeceleration	KEYWORD2
+enable	KEYWORD2
+disable	KEYWORD2
+isEnabled	KEYWORD2
+isRunning	KEYWORD2
+waitForState	KEYWORD2
+getState	KEYWORD2
+getPosition	KEYWORD2
+setPosition	KEYWORD2
+getPositionMm	KEYWORD2
+setPositionMm	KEYWORD2
+getAngleDeg	KEYWORD2
+setAngleDeg	KEYWORD2
+getVelocity	KEYWORD2
+setLimits	KEYWORD2
+setEndstopMin	KEYWORD2
+setEndstopMax	KEYWORD2
+setEndstops	KEYWORD2
+enableLimitProtection	KEYWORD2
+isDirectionAllowed	KEYWORD2
+isTriggered	KEYWORD2
+setDebounceUs	KEYWORD2
+home	KEYWORD2
+homeMin	KEYWORD2
+homeMax	KEYWORD2
+homeMinMax	KEYWORD2
+homeMaxMin	KEYWORD2
+homeAsync	KEYWORD2
+homeMinMaxAsync	KEYWORD2
+homeMaxMinAsync	KEYWORD2
+waitForHoming	KEYWORD2
+abortHoming	KEYWORD2
+isHomed	KEYWORD2
+isHoming	KEYWORD2
+registerTarget	KEYWORD2
+unregisterTarget	KEYWORD2
+pauseAll	KEYWORD2
+resumeAll	KEYWORD2
+fastStopAll	KEYWORD2
+emergencyStopAll	KEYWORD2
+clearEmergencyStopAll	KEYWORD2
+stopEventLoopCreate	KEYWORD2
+stopEventLoopDelete	KEYWORD2
+stopEventLoopAttachController	KEYWORD2
+stopEventLoopDetachController	KEYWORD2
+stopEventPost	KEYWORD2
+stopEventPostISR	KEYWORD2
+
+#######################################
+# Constants (LITERAL1)
+#######################################
+
+Clockwise	LITERAL1
+Counterclockwise	LITERAL1
+Forward	LITERAL1
+Backward	LITERAL1
+Positive	LITERAL1
+Negative	LITERAL1
+Neutral	LITERAL1
+Stopped	LITERAL1
+Paused	LITERAL1
+Running	LITERAL1
+Accelerating	LITERAL1
+Decelerating	LITERAL1
+EmergencyStop	LITERAL1
+ALL_TARGETS	LITERAL1

@@ -33,6 +33,8 @@
 
 # Build artefacts
 build/
+test/sandbox_test
+serial.log
 
 # VSCode settings
 .vscode/
